@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+option java_package = "com.team2207.roboroute.datastore";
+option java_multiple_files = true;
+
+message AppData {
+    repeated Action actions = 1;
+}
+
+enum ActionType {
+    POSE = 0;
+    NT = 1;
+    PATHPLANNER = 2;
+}
+
+message Action {
+    int32 id = 1;
+    string name = 2;
+
+    ActionType actionType = 3;
+
+    // For Pose ActionType only
+    Pose2d pose = 4;
+
+    // For PathPlanner ActionType Only
+    string path_name = 5;
+
+    // For NT ActionType Only
+    string nt_key = 6;
+    string nt_data = 7;
+}
+
+message Pose2d {
+    double x = 1;
+    double y = 2;
+    double rotation = 3;
+}
