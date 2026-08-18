@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option java_package = "com.team2207.roboroute.datastore";
+option java_multiple_files = true;
+
+message ButtonLayout {
+    repeated CustomButton buttons = 1;
+}
+
+message CustomButton {
+    int32 id = 1;
+    float x = 2;
+    float y = 3;
+    float radius = 4;
+    int32 action_id = 5;
+}

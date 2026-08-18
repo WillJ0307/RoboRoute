@@ -1,0 +1,84 @@
+package com.team2207.roboroute.ui.home
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.team2207.roboroute.datastore.ActionRepository
+import com.team2207.roboroute.datastore.AppData
+import com.team2207.roboroute.datastore.ButtonLayout
+import com.team2207.roboroute.datastore.CustomButton
+import com.team2207.roboroute.datastore.LayoutRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
+    private val layoutRepository = LayoutRepository(application)
+    private val actionRepository = ActionRepository(application)
+
+    val layout: StateFlow<ButtonLayout> = layoutRepository.layoutFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ButtonLayout.getDefaultInstance()
+    )
+
+    val appData: StateFlow<AppData> = actionRepository.appDataFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = AppData.getDefaultInstance()
+    )
+
+    private val _isEditing = MutableStateFlow(false)
+    val isEditing: StateFlow<Boolean> = _isEditing.asStateFlow()
+
+    fun setEditing(editing: Boolean) {
+        _isEditing.value = editing
+    }
+
+    fun addButton() {
+        viewModelScope.launch {
+            layoutRepository.updateLayout { builder ->
+                val newId = (builder.buttonsList.maxOfOrNull { it.id } ?: 0) + 1
+                builder.addButtons(
+                    CustomButton.newBuilder()
+                        .setId(newId)
+                        .setX(0.5f)
+                        .setY(0.5f)
+                        .setRadius(50f)
+                        .build()
+                )
+            }
+        }
+    }
+
+    fun updateButton(buttonId: Int, x: Float, y: Float, radius: Float, actionId: Int) {
+        viewModelScope.launch {
+            layoutRepository.updateLayout { builder ->
+                val index = builder.buttonsList.indexOfFirst { it.id == buttonId }
+                if (index != -1) {
+                    builder.setButtons(index, builder.getButtons(index).toBuilder()
+                        .setX(x)
+                        .setY(y)
+                        .setRadius(radius)
+                        .setActionId(actionId)
+                        .build()
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteButton(buttonId: Int) {
+        viewModelScope.launch {
+            layoutRepository.updateLayout { builder ->
+                val index = builder.buttonsList.indexOfFirst { it.id == buttonId }
+                if (index != -1) {
+                    builder.removeButtons(index)
+                }
+            }
+        }
+    }
+}
