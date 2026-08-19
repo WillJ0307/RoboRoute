@@ -1,6 +1,7 @@
 package com.team2207.roboroute.ui.action
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,63 +27,85 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
+import kotlin.math.roundToInt
 
 sealed class Action {
-    data class NTAction(var name: String, var ntRoute: String, var data: String) : Action()
-    data class PathPlanner(var name: String, var pathName: String) : Action()
-    data class PoseSelection(var name: String, var x: Double = 0.0, var y: Double = 0.0, var r: Double = 0.0) : Action()
+    data class NTAction(var id: Int = 0, var name: String, var ntRoute: String, var data: String) : Action()
+    data class PathPlanner(var id: Int = 0, var name: String, var pathName: String) : Action()
+    data class PoseSelection(var id: Int = 0, var name: String, var x: Double = 0.0, var y: Double = 0.0, var r: Double = 0.0) : Action()
+    
+    val actionId: Int
+        get() = when (this) {
+            is NTAction -> id
+            is PathPlanner -> id
+            is PoseSelection -> id
+        }
 }
 
 enum class ActionType { NT_ACTION, PATH_PLANNER, POSE_SELECTION }
 
 @Composable
-fun ActionNameBox(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("Name of Your Action") }
-    )
-}
-
-@Composable
-fun ActionRouteBox(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("Route of Your Action") }
-    )
-}
-
-@Composable
-fun ActionDataBox(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("Data of Your Action") }
-    )
-}
-
-@Composable
-fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) {
-    // 1. Text field input states
-    var nameInput by remember { mutableStateOf("") }
-    var ntRouteInput by remember { mutableStateOf("") }
-    var dataInput by remember { mutableStateOf("") }
+fun ActionCreationScreen(
+    onDismiss: () -> Unit,
+    onSaveAction: (Action) -> Unit,
+    onEditPose: () -> Unit,
+    currentPose: Action.PoseSelection? = null,
+    initialAction: Action? = null
+) {
+    // 1. Text field input states, initialized from initialAction if available
+    var nameInput by remember { mutableStateOf(initialAction?.let { 
+        when(it) {
+            is Action.NTAction -> it.name
+            is Action.PathPlanner -> it.name
+            is Action.PoseSelection -> it.name
+        }
+    } ?: "") }
+    
+    var ntRouteInput by remember { mutableStateOf(initialAction?.let {
+        when(it) {
+            is Action.NTAction -> it.ntRoute
+            is Action.PathPlanner -> it.pathName
+            else -> ""
+        }
+    } ?: "") }
+    
+    var dataInput by remember { mutableStateOf(initialAction?.let {
+        when(it) {
+            is Action.NTAction -> it.data
+            else -> ""
+        }
+    } ?: "") }
 
     // 2. Track which tab is currently selected
-    var selectedTab by remember { mutableStateOf(ActionType.NT_ACTION) }
+    var selectedTab by remember { 
+        mutableStateOf(
+            when {
+                currentPose != null -> ActionType.POSE_SELECTION
+                initialAction is Action.NTAction -> ActionType.NT_ACTION
+                initialAction is Action.PathPlanner -> ActionType.PATH_PLANNER
+                initialAction is Action.PoseSelection -> ActionType.POSE_SELECTION
+                else -> ActionType.NT_ACTION
+            }
+        )
+    }
 
-    // Color definitions pulled from your custom functions
-    val primaryAccent = returnPrimaryColor()     // e.g., Purple color in your photo
-    val secondaryAccent = returnSecondaryColor() // e.g., Soft gray or light purple border
+    // Update state if currentPose arrives (from returning from PoseSelector)
+    LaunchedEffect(currentPose) {
+        if (currentPose != null) {
+            selectedTab = ActionType.POSE_SELECTION
+        }
+    }
+
+    val primaryAccent = returnPrimaryColor()
+    val secondaryAccent = returnSecondaryColor()
 
     Scaffold(
         bottomBar = {
-            // Bottom Save/Cancel Actions Area
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,20 +114,23 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
             ) {
                 Button(
                     onClick = {
-                        // Dynamically build object depending on active type
                         val createdAction = when (selectedTab) {
                             ActionType.NT_ACTION -> Action.NTAction(
+                                id = initialAction?.actionId ?: 0,
                                 name = nameInput.trim(),
                                 ntRoute = ntRouteInput.trim(),
                                 data = dataInput.trim()
                             )
                             ActionType.PATH_PLANNER -> Action.PathPlanner(
+                                id = initialAction?.actionId ?: 0,
                                 name = nameInput.trim(),
-                                pathName = ntRouteInput.trim() // Shared box acts as pathName
+                                pathName = ntRouteInput.trim()
                             )
-                            ActionType.POSE_SELECTION -> Action.PoseSelection(
-                                name = nameInput.trim() // Takes only name for now
-                            )
+                            ActionType.POSE_SELECTION -> {
+                                currentPose?.copy(id = initialAction?.actionId ?: 0, name = nameInput.trim()) 
+                                    ?: (initialAction as? Action.PoseSelection)?.copy(name = nameInput.trim())
+                                    ?: Action.PoseSelection(id = initialAction?.actionId ?: 0, name = nameInput.trim())
+                            }
                         }
                         onSaveAction(createdAction)
                     },
@@ -132,19 +159,17 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Top Header Line
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Action", fontSize = 28.sp)
+                Text(if (initialAction == null) "New Action" else "Edit Action", fontSize = 28.sp)
                 IconButton(onClick = onDismiss) {
-                    Text("✕", fontSize = 20.sp) // Simple text close button placeholder
+                    Text("✕", fontSize = 20.sp)
                 }
             }
 
-            // Text Box 1: Universal Action Name (Always Visible)
             OutlinedTextField(
                 value = nameInput,
                 onValueChange = { nameInput = it },
@@ -153,7 +178,6 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryAccent)
             )
 
-            // Segmented Tab Row Selection Control
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -189,10 +213,8 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                 }
             }
 
-            // Conditional Inputs Block based on Current Selection State
             when (selectedTab) {
                 ActionType.NT_ACTION -> {
-                    // Text Box 2: NT Route
                     OutlinedTextField(
                         value = ntRouteInput,
                         onValueChange = { ntRouteInput = it },
@@ -200,7 +222,6 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryAccent)
                     )
-                    // Text Box 3: Data
                     OutlinedTextField(
                         value = dataInput,
                         onValueChange = { dataInput = it },
@@ -210,7 +231,6 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                     )
                 }
                 ActionType.PATH_PLANNER -> {
-                    // Reuses Text Box 2 explicitly for path name entry
                     OutlinedTextField(
                         value = ntRouteInput,
                         onValueChange = { ntRouteInput = it },
@@ -220,7 +240,34 @@ fun ActionCreationScreen(onDismiss: () -> Unit, onSaveAction: (Action) -> Unit) 
                     )
                 }
                 ActionType.POSE_SELECTION -> {
-                    // Pose Selection takes just Name for now, rendering no extra boxes.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val displayPose = currentPose ?: (initialAction as? Action.PoseSelection)
+                        if (displayPose != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.LightGray.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = "X: ${displayPose.x.roundToInt()}", color = Color.Red, fontWeight = FontWeight.Bold)
+                                Text(text = "Y: ${displayPose.y.roundToInt()}", color = Color.Green, fontWeight = FontWeight.Bold)
+                                Text(text = "R: ${displayPose.r.roundToInt()}°", color = Color.Blue, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        
+                        Button(
+                            onClick = onEditPose,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(if (displayPose == null) "Select Pose" else "Edit Pose", color = Color.White)
+                        }
+                    }
                 }
             }
         }

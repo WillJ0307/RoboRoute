@@ -30,4 +30,8 @@ class LayoutRepository(private val context: Context) {
             builder.build()
         }
     }
+
+    suspend fun replaceAll(layout: ButtonLayout) {
+        context.layoutDataStore.updateData { layout }
+    }
 }

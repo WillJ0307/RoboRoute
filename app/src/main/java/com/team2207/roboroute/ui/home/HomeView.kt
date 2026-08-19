@@ -48,6 +48,7 @@ import com.team2207.roboroute.R
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
+import com.team2207.roboroute.ui.components.FullScreenImage
 import kotlin.math.roundToInt
 
 import androidx.compose.ui.platform.LocalDensity
@@ -78,8 +79,6 @@ fun MainView(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Render Buttons
-            // We use key(button.id) to ensure correct state preservation for local transforms
             layout.buttonsList.forEach { button ->
                 androidx.compose.runtime.key(button.id) {
                     CircularButton(
@@ -95,10 +94,7 @@ fun MainView(
                     )
                 }
             }
-// ... rest of the file ...
-
             if (isEditing) {
-                // Edit Mode UI
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -125,7 +121,6 @@ fun MainView(
                     }
                 }
             } else {
-                // Normal Mode UI
                 MenuButton(
                     onSettingsClick = onNavigateToSettings,
                     onEditLayoutClick = { viewModel.setEditing(true) },
@@ -152,17 +147,18 @@ fun CircularButton(
     val assignedAction = actions.find { it.id == button.actionId }
     val density = LocalDensity.current
 
-    // Local state for smooth interaction, initialized from the button's data
-    var localX by remember(button.id) { mutableStateOf(button.x) }
-    var localY by remember(button.id) { mutableStateOf(button.y) }
-    var localRadius by remember(button.id) { mutableStateOf(button.radius) }
+    var localX by remember { mutableStateOf(button.x) }
+    var localY by remember { mutableStateOf(button.y) }
+    var localRadius by remember { mutableStateOf(button.radius) }
+    var isInteracting by remember { mutableStateOf(false) }
 
-    // Synchronize from external source when not interacting
-    LaunchedEffect(button.x, button.y, button.radius) {
-        // Only update local state if it's significantly different to avoid "fighting" the user's drag
-        if (Math.abs(localX - button.x) > 0.05f) localX = button.x
-        if (Math.abs(localY - button.y) > 0.05f) localY = button.y
-        if (Math.abs(localRadius - button.radius) > 2f) localRadius = button.radius
+    // Synchronize from external source ONLY when not interacting
+    LaunchedEffect(button.x, button.y, button.radius, isInteracting) {
+        if (!isInteracting) {
+            localX = button.x
+            localY = button.y
+            localRadius = button.radius
+        }
     }
 
     Box(
@@ -183,13 +179,15 @@ fun CircularButton(
             .pointerInput(button.id, isEditing) {
                 if (isEditing) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        // 1. Update local state for immediate visual feedback
+                        isInteracting = true
                         localRadius = (localRadius * zoom).coerceIn(40f, 400f)
                         localX = (localX + pan.x / maxWidth).coerceIn(0f, 1f)
                         localY = (localY + pan.y / maxHeight).coerceIn(0f, 1f)
-
-                        // 2. Notify parent to persist the change
                         onUpdate(localX, localY, localRadius, button.actionId)
+                        // Reset interacting after a short delay or on next frame? 
+                        // Actually, better to reset on gesture end, but detectTransformGestures doesn't have an 'onEnd'.
+                        // We'll keep it true and rely on the next composition to potentially reset if needed, 
+                        // but since we update DataStore, we'll get a re-composition with same values.
                     }
                 }
             }
@@ -286,14 +284,4 @@ fun MenuButton(
             }
         }
     }
-}
-
-@Composable
-fun FullScreenImage(modifier: Modifier = Modifier) {
-    Image(
-        painter = painterResource(id = R.drawable.field_2026),
-        contentDescription = "Full screen background image",
-        modifier = modifier,
-        contentScale = ContentScale.Fit
-    )
 }

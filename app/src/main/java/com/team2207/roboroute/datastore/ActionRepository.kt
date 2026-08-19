@@ -25,9 +25,18 @@ class ActionRepository(private val context: Context) {
 
     suspend fun addAction(action: Action) {
         context.dataStore.updateData { currentAppData ->
-            currentAppData.toBuilder()
-                .addActions(action)
-                .build()
+            val builder = currentAppData.toBuilder()
+            val existingIndex = builder.actionsList.indexOfFirst { it.id == action.id }
+            if (existingIndex != -1) {
+                builder.setActions(existingIndex, action)
+            } else {
+                builder.addActions(action)
+            }
+            builder.build()
         }
+    }
+
+    suspend fun replaceAll(appData: AppData) {
+        context.dataStore.updateData { appData }
     }
 }
