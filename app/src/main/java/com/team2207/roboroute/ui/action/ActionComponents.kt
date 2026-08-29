@@ -35,19 +35,17 @@ import com.team2207.roboroute.ui.theme.returnSecondaryColor
 import kotlin.math.roundToInt
 
 sealed class Action {
-    data class NTAction(var id: Int = 0, var name: String, var ntRoute: String, var data: String) : Action()
     data class PathPlanner(var id: Int = 0, var name: String, var pathName: String) : Action()
     data class PoseSelection(var id: Int = 0, var name: String, var x: Double = 0.0, var y: Double = 0.0, var r: Double = 0.0) : Action()
     
     val actionId: Int
         get() = when (this) {
-            is NTAction -> id
             is PathPlanner -> id
             is PoseSelection -> id
         }
 }
 
-enum class ActionType { NT_ACTION, PATH_PLANNER, POSE_SELECTION }
+enum class ActionType { PATH_PLANNER, POSE_SELECTION }
 
 @Composable
 fun ActionCreationScreen(
@@ -60,7 +58,6 @@ fun ActionCreationScreen(
     // 1. Text field input states, initialized from initialAction if available
     var nameInput by remember { mutableStateOf(initialAction?.let { 
         when(it) {
-            is Action.NTAction -> it.name
             is Action.PathPlanner -> it.name
             is Action.PoseSelection -> it.name
         }
@@ -68,15 +65,7 @@ fun ActionCreationScreen(
     
     var ntRouteInput by remember { mutableStateOf(initialAction?.let {
         when(it) {
-            is Action.NTAction -> it.ntRoute
             is Action.PathPlanner -> it.pathName
-            else -> ""
-        }
-    } ?: "") }
-    
-    var dataInput by remember { mutableStateOf(initialAction?.let {
-        when(it) {
-            is Action.NTAction -> it.data
             else -> ""
         }
     } ?: "") }
@@ -86,10 +75,9 @@ fun ActionCreationScreen(
         mutableStateOf(
             when {
                 currentPose != null -> ActionType.POSE_SELECTION
-                initialAction is Action.NTAction -> ActionType.NT_ACTION
                 initialAction is Action.PathPlanner -> ActionType.PATH_PLANNER
                 initialAction is Action.PoseSelection -> ActionType.POSE_SELECTION
-                else -> ActionType.NT_ACTION
+                else -> ActionType.PATH_PLANNER
             }
         )
     }
@@ -115,12 +103,6 @@ fun ActionCreationScreen(
                 Button(
                     onClick = {
                         val createdAction = when (selectedTab) {
-                            ActionType.NT_ACTION -> Action.NTAction(
-                                id = initialAction?.actionId ?: 0,
-                                name = nameInput.trim(),
-                                ntRoute = ntRouteInput.trim(),
-                                data = dataInput.trim()
-                            )
                             ActionType.PATH_PLANNER -> Action.PathPlanner(
                                 id = initialAction?.actionId ?: 0,
                                 name = nameInput.trim(),
@@ -186,7 +168,7 @@ fun ActionCreationScreen(
                     val isSelected = selectedTab == type
                     val shape = when (index) {
                         0 -> RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)
-                        2 -> RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
+                        1 -> RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
                         else -> RoundedCornerShape(0.dp)
                     }
 
@@ -202,7 +184,6 @@ fun ActionCreationScreen(
                     ) {
                         Text(
                             text = when (type) {
-                                ActionType.NT_ACTION -> "NT Action"
                                 ActionType.PATH_PLANNER -> "PathPlanner"
                                 ActionType.POSE_SELECTION -> "Pose Selection"
                             },
@@ -214,22 +195,6 @@ fun ActionCreationScreen(
             }
 
             when (selectedTab) {
-                ActionType.NT_ACTION -> {
-                    OutlinedTextField(
-                        value = ntRouteInput,
-                        onValueChange = { ntRouteInput = it },
-                        label = { Text("NT Route") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryAccent)
-                    )
-                    OutlinedTextField(
-                        value = dataInput,
-                        onValueChange = { dataInput = it },
-                        label = { Text("Data") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryAccent)
-                    )
-                }
                 ActionType.PATH_PLANNER -> {
                     OutlinedTextField(
                         value = ntRouteInput,
@@ -255,7 +220,7 @@ fun ActionCreationScreen(
                             ) {
                                 Text(text = "X: ${"%.2f".format(displayPose.x)}m", color = Color.Red, fontWeight = FontWeight.Bold)
                                 Text(text = "Y: ${"%.2f".format(displayPose.y)}m", color = Color.Green, fontWeight = FontWeight.Bold)
-                                Text(text = "R: ${displayPose.r.roundToInt()}°", color = Color.Blue, fontWeight = FontWeight.Bold)
+                                Text(text = "R: ${"%.2f".format(displayPose.r)} rad", color = Color.Blue, fontWeight = FontWeight.Bold)
                             }
                         }
                         

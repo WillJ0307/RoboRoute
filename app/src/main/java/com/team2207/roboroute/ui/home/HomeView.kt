@@ -104,16 +104,11 @@ fun MainView(
                     val xMeter = livePose.x
                     val yMeter = livePose.y
                     
-                    // Conversion: X is depth (length), Y is width.
-                    // (0,0) is bottom-right.
-                    // UP increases X -> Negative Y Screen Offset
-                    // LEFT increases Y -> Negative X Screen Offset
+                    // X is depth (vertical), Y is width (horizontal).
+                    // (0,0) is bottom-right. Shifting Left/Up.
                     val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
                     val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
                     
-                    // Robot Dimensions in DP (scaled relative to field image)
-                    // Let's say robot_width and robot_length are in meters.
-                    // We need to scale them to DP.
                     val robotWidthDp = (appData.robotWidth / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
                     val robotLengthDp = (appData.robotLength / FIELD_WIDTH_METERS * fitHeightDp.value).dp
 
@@ -122,7 +117,7 @@ fun MainView(
                             .align(Alignment.BottomEnd)
                             .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
                             .graphicsLayer {
-                                rotationZ = livePose.rotation.toFloat()
+                                rotationZ = Math.toDegrees(livePose.rotation).toFloat()
                             },
                         showControls = false,
                         robotWidth = robotWidthDp,

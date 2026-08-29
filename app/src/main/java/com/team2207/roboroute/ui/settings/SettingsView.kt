@@ -147,8 +147,6 @@ fun SettingsView(
                     .padding(top = 70.dp)
                     .padding(horizontal = 16.dp)
             ) {
-                RefreshInterval()
-                
                 OutlinedTextField(
                     value = localNtPath,
                     onValueChange = { 
@@ -193,16 +191,10 @@ fun SettingsView(
                     onSaveAction = { uiAction ->
                         val protoAction = ProtoAction.newBuilder().apply {
                             name = when (uiAction) {
-                                is UIAction.NTAction -> uiAction.name
                                 is UIAction.PathPlanner -> uiAction.name
                                 is UIAction.PoseSelection -> uiAction.name
                             }
                             when (uiAction) {
-                                is UIAction.NTAction -> {
-                                    actionType = ProtoActionType.NT
-                                    ntKey = uiAction.ntRoute
-                                    ntData = uiAction.data
-                                }
                                 is UIAction.PathPlanner -> {
                                     actionType = ProtoActionType.PATHPLANNER
                                     pathName = uiAction.pathName
@@ -280,16 +272,14 @@ fun SettingsView(
                             supportingContent = {
                                 Text(
                                     when (action.actionType) {
-                                        ProtoActionType.NT -> "NT: ${action.ntKey}"
                                         ProtoActionType.PATHPLANNER -> "Path: ${action.pathName}"
-                                        ProtoActionType.POSE -> "Pose Selection: (${"%.2f".format(action.pose.x)}, ${"%.2f".format(action.pose.y)}, ${action.pose.rotation.toInt()}°)"
-                                        else -> "Unknown"
+                                        ProtoActionType.POSE -> "Pose Selection: (${"%.2f".format(action.pose.x)}, ${"%.2f".format(action.pose.y)}, ${"%.2f".format(action.pose.rotation)} rad)"
+                                        else -> "Legacy/Unknown"
                                     }
                                 )
                             },
                             modifier = Modifier.clickable {
                                 editingAction = when (action.actionType) {
-                                    ProtoActionType.NT -> UIAction.NTAction(action.id, action.name, action.ntKey, action.ntData)
                                     ProtoActionType.PATHPLANNER -> UIAction.PathPlanner(action.id, action.name, action.pathName)
                                     ProtoActionType.POSE -> UIAction.PoseSelection(action.id, action.name, action.pose.x, action.pose.y, action.pose.rotation)
                                     else -> null
@@ -351,19 +341,6 @@ fun SerialLogSheet(onDismiss: () -> Unit, onManualSubscribe: () -> Unit) {
             }
         }
     }
-}
-
-@Composable
-fun RefreshInterval() {
-    var refreshInterval by remember { mutableStateOf("") }
-
-    OutlinedTextField(
-        value = refreshInterval,
-        onValueChange = { refreshInterval = it },
-        label = { Text("Refresh Interval")},
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -65,7 +66,7 @@ fun PoseSelectorMainView(
     modifier: Modifier = Modifier,
     initialX: Double = 0.0,
     initialY: Double = 0.0,
-    initialR: Double = 0.0
+    initialR: Double = 0.0 // Now in RADIANS
 ) {
     var robotOffset by remember { mutableStateOf(Offset.Zero) }
     var robotRotation by remember { mutableStateOf(initialR.toFloat()) }
@@ -164,7 +165,7 @@ fun PoseSelectorMainView(
                 
                 Text(text = "X: ${"%.2f".format(frcX)}m", color = Color.Red, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(text = "Y: ${"%.2f".format(frcY)}m", color = Color.Green, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(text = "R: ${robotRotation.roundToInt()}°", color = Color.Blue, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(text = "R: ${"%.2f".format(robotRotation)} rad", color = Color.Blue, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -195,6 +196,7 @@ fun RobotVisual(
         val squareTopY = if (showControls) dotRadiusPx + extensionPx else 0f
         val centerY = squareTopY + (robotLengthPx / 2f)
 
+        // 1. Draw rounded rectangle (Robot Body)
         drawRoundRect(
             color = primaryColor,
             topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
@@ -203,6 +205,20 @@ fun RobotVisual(
             style = Stroke(width = strokeWidthPx)
         )
 
+        // 2. Draw Arrow pointing "Forward" (inside the square)
+        val arrowPath = Path().apply {
+            val arrowWidth = robotWidthPx * 0.4f
+            val arrowTopY = squareTopY + (robotLengthPx * 0.2f)
+            val arrowBottomY = squareTopY + (robotLengthPx * 0.8f)
+            
+            moveTo(centerX, arrowTopY) // Tip
+            lineTo(centerX - arrowWidth / 2, arrowBottomY) // Left base
+            lineTo(centerX + arrowWidth / 2, arrowBottomY) // Right base
+            close()
+        }
+        drawPath(path = arrowPath, color = primaryColor.copy(alpha = 0.5f))
+
+        // 3. Draw extension line for controls
         if (showControls) {
             drawLine(
                 color = primaryColor,
@@ -217,7 +233,7 @@ fun RobotVisual(
 
 @Composable
 fun RobotPoseEdit(
-    rotation: Float,
+    rotation: Float, // Now in RADIANS
     modifier: Modifier = Modifier,
     onMove: (Offset) -> Unit,
     onRotate: (Float) -> Unit,
@@ -243,13 +259,13 @@ fun RobotPoseEdit(
     Box(
         modifier = modifier
             .size(width = robotWidth, height = visualTotalHeight)
-            .offset(x = robotWidth / 2, y = robotLength / 2) // Center correction relative to bottom-end
+            .offset(x = robotWidth / 2, y = robotLength / 2)
     ) {
         RobotVisual(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    rotationZ = localRotation
+                    rotationZ = Math.toDegrees(localRotation.toDouble()).toFloat()
                     val yPivot = rotationCenterOffsetFromTop.toPx() / size.height
                     transformOrigin = TransformOrigin(0.5f, yPivot)
                 },
@@ -275,7 +291,7 @@ fun RobotPoseEdit(
         )
 
         // Top Dot - ROTATE
-        val angleRad = Math.toRadians(localRotation.toDouble() - 90.0)
+        val angleRad = localRotation.toDouble() - (Math.PI / 2.0)
         val radiusPx = extensionLength + (robotLength / 2)
         val dotOffsetX = (radiusPx.value * cos(angleRad)).dp
         val dotOffsetY = (radiusPx.value * sin(angleRad)).dp
@@ -300,8 +316,8 @@ fun RobotPoseEdit(
                         val localCenterY = (dotSize.toPx() / 2f) + extensionLength.toPx() + (robotLength.toPx() / 2f)
                         val currentPos = change.position
                         val currentVector = Offset(currentPos.x - localCenterX, currentPos.y - localCenterY)
-                        val angle = Math.toDegrees(atan2(currentVector.y.toDouble(), currentVector.x.toDouble())).toFloat()
-                        localRotation = angle + 90f
+                        val angle = atan2(currentVector.y.toDouble(), currentVector.x.toDouble()).toFloat()
+                        localRotation = angle + (Math.PI.toFloat() / 2f)
                         onRotate(localRotation)
                     }
                 }
