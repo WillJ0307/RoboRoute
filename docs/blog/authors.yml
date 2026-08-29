@@ -1,0 +1,24 @@
+elliot:
+  name: Elliot Prigelmeier
+  title: Robot Code Developer
+  url: https://elliotprigelmeier.com
+  image_url: https://github.com/eprig.png
+  page: true
+  socials:
+    github: eprig
+
+will:
+  name: Will Jents
+  title: Android App Developer
+  image_url: https://github.com/WillJ0307.png
+  page: true
+  socials:
+    github: WillJ0307
+
+aidan:
+  name: Aidan Jensen
+  title: NTOverAOA Developer
+  image_url: https://github.com/aidan-j532.png
+  page: true
+  socials:
+    github: aidan-j532
