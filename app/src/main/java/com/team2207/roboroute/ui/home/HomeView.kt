@@ -50,9 +50,14 @@ import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
 import com.team2207.roboroute.ui.components.FullScreenImage
 import kotlin.math.roundToInt
+import kotlin.math.min
 
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import com.team2207.roboroute.ui.action.RobotVisual
+import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
+import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
 
 @Composable
 fun MainView(
@@ -63,6 +68,8 @@ fun MainView(
     val isEditing by viewModel.isEditing.collectAsState()
     val layout by viewModel.layout.collectAsState()
     val appData by viewModel.appData.collectAsState()
+    val livePose by viewModel.livePose.collectAsState()
+    val isPoseValid by viewModel.isPoseValid.collectAsState()
 
     Scaffold(
         modifier = modifier.fillMaxSize()
@@ -74,26 +81,73 @@ fun MainView(
         ) {
             val maxWidthPx = constraints.maxWidth.toFloat()
             val maxHeightPx = constraints.maxHeight.toFloat()
+            
+            val painter = painterResource(id = R.drawable.field_2026)
+            val imgSize = painter.intrinsicSize
+            val scale = min(maxWidthPx / imgSize.width, maxHeightPx / imgSize.height)
+            val density = LocalDensity.current.density
+            val fitWidthDp = (imgSize.width * scale / density).dp
+            val fitHeightDp = (imgSize.height * scale / density).dp
 
             FullScreenImage(
                 modifier = Modifier.fillMaxSize()
             )
 
-            layout.buttonsList.forEach { button ->
-                androidx.compose.runtime.key(button.id) {
-                    CircularButton(
-                        button = button,
-                        isEditing = isEditing,
-                        onUpdate = { x, y, r, actionId ->
-                            viewModel.updateButton(button.id, x, y, r, actionId)
-                        },
-                        onDelete = { viewModel.deleteButton(button.id) },
-                        actions = appData.actionsList,
-                        maxWidth = maxWidthPx,
-                        maxHeight = maxHeightPx
+            // Field-relative container
+            Box(
+                modifier = Modifier
+                    .size(fitWidthDp, fitHeightDp)
+                    .align(Alignment.Center)
+            ) {
+                // Live Robot Pose
+                if (isPoseValid) {
+                    val xMeter = livePose.x
+                    val yMeter = livePose.y
+                    
+                    // Conversion: X is depth (length), Y is width.
+                    // (0,0) is bottom-right.
+                    // UP increases X -> Negative Y Screen Offset
+                    // LEFT increases Y -> Negative X Screen Offset
+                    val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
+                    val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
+                    
+                    // Robot Dimensions in DP (scaled relative to field image)
+                    // Let's say robot_width and robot_length are in meters.
+                    // We need to scale them to DP.
+                    val robotWidthDp = (appData.robotWidth / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
+                    val robotLengthDp = (appData.robotLength / FIELD_WIDTH_METERS * fitHeightDp.value).dp
+
+                    RobotVisual(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
+                            .graphicsLayer {
+                                rotationZ = livePose.rotation.toFloat()
+                            },
+                        showControls = false,
+                        robotWidth = robotWidthDp,
+                        robotLength = robotLengthDp
                     )
                 }
+
+                // Layout Buttons
+                layout.buttonsList.forEach { button ->
+                    androidx.compose.runtime.key(button.id) {
+                        CircularButton(
+                            button = button,
+                            isEditing = isEditing,
+                            onUpdate = { x, y, r, actionId ->
+                                viewModel.updateButton(button.id, x, y, r, actionId)
+                            },
+                            onDelete = { viewModel.deleteButton(button.id) },
+                            actions = appData.actionsList,
+                            maxWidth = maxWidthPx,
+                            maxHeight = maxHeightPx
+                        )
+                    }
+                }
             }
+
             if (isEditing) {
                 Column(
                     modifier = Modifier
@@ -131,6 +185,19 @@ fun MainView(
             }
         }
     }
+
+    if (!isPoseValid && !isEditing) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Robot Position Not Found") },
+            text = { Text("Can't find robot position. Please check your NetworkTables path and serial connection.") },
+            confirmButton = {
+                TextButton(onClick = onNavigateToSettings) {
+                    Text("Check Settings")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -152,7 +219,6 @@ fun CircularButton(
     var localRadius by remember { mutableStateOf(button.radius) }
     var isInteracting by remember { mutableStateOf(false) }
 
-    // Synchronize from external source ONLY when not interacting
     LaunchedEffect(button.x, button.y, button.radius, isInteracting) {
         if (!isInteracting) {
             localX = button.x
@@ -184,10 +250,6 @@ fun CircularButton(
                         localX = (localX + pan.x / maxWidth).coerceIn(0f, 1f)
                         localY = (localY + pan.y / maxHeight).coerceIn(0f, 1f)
                         onUpdate(localX, localY, localRadius, button.actionId)
-                        // Reset interacting after a short delay or on next frame? 
-                        // Actually, better to reset on gesture end, but detectTransformGestures doesn't have an 'onEnd'.
-                        // We'll keep it true and rely on the next composition to potentially reset if needed, 
-                        // but since we update DataStore, we'll get a re-composition with same values.
                     }
                 }
             }

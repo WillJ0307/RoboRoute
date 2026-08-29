@@ -15,9 +15,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.team2207.roboroute.datastore.Pose2d
+import com.team2207.roboroute.serial.RobotPoseManager
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val layoutRepository = LayoutRepository(application)
     private val actionRepository = ActionRepository(application)
+
+    val livePose: StateFlow<Pose2d> = RobotPoseManager.livePose
+    val isPoseValid: StateFlow<Boolean> = RobotPoseManager.isPoseValid
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                RobotPoseManager.checkValidity()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
 
     val layout: StateFlow<ButtonLayout> = layoutRepository.layoutFlow.stateIn(
         scope = viewModelScope,

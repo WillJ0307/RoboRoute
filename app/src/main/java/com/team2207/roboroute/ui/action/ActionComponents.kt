@@ -253,8 +253,8 @@ fun ActionCreationScreen(
                                     .padding(12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(text = "X: ${displayPose.x.roundToInt()}", color = Color.Red, fontWeight = FontWeight.Bold)
-                                Text(text = "Y: ${displayPose.y.roundToInt()}", color = Color.Green, fontWeight = FontWeight.Bold)
+                                Text(text = "X: ${"%.2f".format(displayPose.x)}m", color = Color.Red, fontWeight = FontWeight.Bold)
+                                Text(text = "Y: ${"%.2f".format(displayPose.y)}m", color = Color.Green, fontWeight = FontWeight.Bold)
                                 Text(text = "R: ${displayPose.r.roundToInt()}°", color = Color.Blue, fontWeight = FontWeight.Bold)
                             }
                         }

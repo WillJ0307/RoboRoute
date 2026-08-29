@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Generic filter, you can specify manufacturer, model, and version -->
+    <usb-accessory />
+</resources>

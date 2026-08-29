@@ -36,6 +36,23 @@ class ActionRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateNtPath(path: String) {
+        context.dataStore.updateData { currentAppData ->
+            currentAppData.toBuilder()
+                .setNtPath(path)
+                .build()
+        }
+    }
+
+    suspend fun updateRobotDimensions(width: Double, length: Double) {
+        context.dataStore.updateData { currentAppData ->
+            currentAppData.toBuilder()
+                .setRobotWidth(width)
+                .setRobotLength(length)
+                .build()
+        }
+    }
+
     suspend fun replaceAll(appData: AppData) {
         context.dataStore.updateData { appData }
     }

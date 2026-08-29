@@ -19,6 +19,7 @@ import com.team2207.roboroute.model.ActionExport
 import com.team2207.roboroute.model.BackupModel
 import com.team2207.roboroute.model.ButtonExport
 import com.team2207.roboroute.model.PoseExport
+import com.team2207.roboroute.serial.AoaSubscribeTrigger
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -42,6 +43,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             actionRepository.addAction(action)
         }
+    }
+
+    fun updateNtPath(path: String) {
+        viewModelScope.launch {
+            actionRepository.updateNtPath(path)
+        }
+    }
+
+    fun updateRobotDimensions(width: Double, length: Double) {
+        viewModelScope.launch {
+            actionRepository.updateRobotDimensions(width, length)
+        }
+    }
+
+    fun manualSubscribe() {
+        AoaSubscribeTrigger.trigger()
     }
 
     fun exportData(context: Context, uri: Uri) {

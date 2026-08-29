@@ -5,6 +5,9 @@ option java_multiple_files = true;
 
 message AppData {
     repeated Action actions = 1;
+    string nt_path = 2;
+    double robot_width = 3;
+    double robot_length = 4;
 }
 
 enum ActionType {

@@ -4,10 +4,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +53,7 @@ import androidx.navigation.NavController
 import com.team2207.roboroute.datastore.Action as ProtoAction
 import com.team2207.roboroute.datastore.ActionType as ProtoActionType
 import com.team2207.roboroute.datastore.Pose2d as ProtoPose2d
+import com.team2207.roboroute.serial.SerialLogManager
 import com.team2207.roboroute.ui.action.Action as UIAction
 import com.team2207.roboroute.ui.action.ActionCreationScreen
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
@@ -57,7 +62,7 @@ import com.team2207.roboroute.ui.theme.returnSecondaryColor
 @Composable
 fun SettingsView(
     onBack: () -> Unit,
-    onEditPose: () -> Unit,
+    onEditPose: (Double, Double, Double) -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel()
@@ -65,9 +70,15 @@ fun SettingsView(
     val appData by viewModel.appData.collectAsState()
     val context = LocalContext.current
     
+    // Local state to avoid cursor jumping
+    var localNtPath by remember(appData.ntPath) { mutableStateOf(appData.ntPath) }
+    var localWidth by remember(appData.robotWidth) { mutableStateOf(appData.robotWidth.toString()) }
+    var localLength by remember(appData.robotLength) { mutableStateOf(appData.robotLength.toString()) }
+    
     var draftPose by remember { mutableStateOf<UIAction.PoseSelection?>(null) }
     var editingAction by remember { mutableStateOf<UIAction?>(null) }
     var showSheet by remember { mutableStateOf(false) }
+    var showLogSheet by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -138,6 +149,46 @@ fun SettingsView(
             ) {
                 RefreshInterval()
                 
+                OutlinedTextField(
+                    value = localNtPath,
+                    onValueChange = { 
+                        localNtPath = it
+                        viewModel.updateNtPath(it) 
+                    },
+                    label = { Text("NetworkTables Robot Pose Path") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                
+                Spacer(modifier = Modifier.padding(4.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = localWidth,
+                        onValueChange = { 
+                            localWidth = it
+                            it.toDoubleOrNull()?.let { w -> viewModel.updateRobotDimensions(w, appData.robotLength) }
+                        },
+                        label = { Text("Robot Width (m)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = localLength,
+                        onValueChange = { 
+                            localLength = it
+                            it.toDoubleOrNull()?.let { l -> viewModel.updateRobotDimensions(appData.robotWidth, l) }
+                        },
+                        label = { Text("Robot Length (m)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                }
+
+                Spacer(modifier = Modifier.padding(8.dp))
+
                 NewActionSheetAndButtonToCreate(
                     onSaveAction = { uiAction ->
                         val protoAction = ProtoAction.newBuilder().apply {
@@ -165,14 +216,13 @@ fun SettingsView(
                                     }.build()
                                 }
                             }
-                            // Use existing ID if editing, otherwise generate new
                             id = if (uiAction.actionId != 0) uiAction.actionId else (appData.actionsList.maxOfOrNull { it.id } ?: 0) + 1
                         }.build()
                         viewModel.saveAction(protoAction)
                         draftPose = null
                         editingAction = null
                     },
-                    onEditPose = onEditPose,
+                    onEditPose = { x, y, r -> onEditPose(x, y, r) },
                     showSheetInitial = showSheet,
                     onSheetVisibilityChange = { 
                         showSheet = it
@@ -189,7 +239,7 @@ fun SettingsView(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
                         onClick = { exportLauncher.launch("roboroute_backup.json") },
@@ -208,6 +258,17 @@ fun SettingsView(
                 }
 
                 Spacer(modifier = Modifier.padding(8.dp))
+                
+                Button(
+                    onClick = { showLogSheet = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonColors(containerColor = returnPrimaryColor(), contentColor = returnSecondaryColor(), disabledContainerColor = Color.Gray, disabledContentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("View Logs")
+                }
+
+                Spacer(modifier = Modifier.padding(8.dp))
 
                 Text("Saved Actions", fontWeight = FontWeight.Bold, color = returnPrimaryColor())
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -221,13 +282,12 @@ fun SettingsView(
                                     when (action.actionType) {
                                         ProtoActionType.NT -> "NT: ${action.ntKey}"
                                         ProtoActionType.PATHPLANNER -> "Path: ${action.pathName}"
-                                        ProtoActionType.POSE -> "Pose Selection: (${action.pose.x.toInt()}, ${action.pose.y.toInt()}, ${action.pose.rotation.toInt()}°)"
+                                        ProtoActionType.POSE -> "Pose Selection: (${"%.2f".format(action.pose.x)}, ${"%.2f".format(action.pose.y)}, ${action.pose.rotation.toInt()}°)"
                                         else -> "Unknown"
                                     }
                                 )
                             },
                             modifier = Modifier.clickable {
-                                // Map Proto to UI Action for editing
                                 editingAction = when (action.actionType) {
                                     ProtoActionType.NT -> UIAction.NTAction(action.id, action.name, action.ntKey, action.ntData)
                                     ProtoActionType.PATHPLANNER -> UIAction.PathPlanner(action.id, action.name, action.pathName)
@@ -238,6 +298,55 @@ fun SettingsView(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+    
+    if (showLogSheet) {
+        SerialLogSheet(
+            onDismiss = { showLogSheet = false },
+            onManualSubscribe = { viewModel.manualSubscribe() }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SerialLogSheet(onDismiss: () -> Unit, onManualSubscribe: () -> Unit) {
+    val logs by SerialLogManager.logs.collectAsState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.fillMaxHeight(0.8f)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("AOA / Serial Logs", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Row {
+                    IconButton(onClick = onManualSubscribe, modifier = Modifier.padding(end = 8.dp)) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Manual Subscribe")
+                    }
+                    Button(onClick = { SerialLogManager.clearLogs() }) {
+                        Text("Clear")
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.padding(8.dp))
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(logs) { log ->
+                    Text(
+                        text = log,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
                 }
             }
         }
@@ -261,7 +370,7 @@ fun RefreshInterval() {
 @Composable
 fun NewActionSheetAndButtonToCreate(
     onSaveAction: (UIAction) -> Unit,
-    onEditPose: () -> Unit,
+    onEditPose: (Double, Double, Double) -> Unit,
     showSheetInitial: Boolean = false,
     onSheetVisibilityChange: (Boolean) -> Unit = {},
     currentPose: UIAction.PoseSelection? = null,
@@ -270,7 +379,6 @@ fun NewActionSheetAndButtonToCreate(
     var showBottomSheet by remember(showSheetInitial) { mutableStateOf(showSheetInitial) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Sync local sheet state with provided initial visibility
     LaunchedEffect(showSheetInitial) {
         showBottomSheet = showSheetInitial
     }
@@ -310,7 +418,12 @@ fun NewActionSheetAndButtonToCreate(
                         showBottomSheet = false
                         onSheetVisibilityChange(false)
                     },
-                    onEditPose = onEditPose,
+                    onEditPose = {
+                        val currentX = currentPose?.x ?: (initialAction as? UIAction.PoseSelection)?.x ?: 0.0
+                        val currentY = currentPose?.y ?: (initialAction as? UIAction.PoseSelection)?.y ?: 0.0
+                        val currentR = currentPose?.r ?: (initialAction as? UIAction.PoseSelection)?.r ?: 0.0
+                        onEditPose(currentX, currentY, currentR)
+                    },
                     currentPose = currentPose,
                     initialAction = initialAction
                 )

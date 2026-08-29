@@ -30,30 +30,38 @@ fun AppNavigation() {
                 onBack = {
                     navController.popBackStack()
                 },
-                onEditPose = {
-                    navController.navigate(POSE_SELECTOR_SCREEN)
+                onEditPose = { x, y, r ->
+                    navController.navigate("$POSE_SELECTOR_SCREEN?x=$x&y=$y&r=$r")
                 },
                 navController = navController
             )
         }
 
         // Pose Selector Route
-        composable(POSE_SELECTOR_SCREEN) {
+        composable(
+            route = "$POSE_SELECTOR_SCREEN?x={x}&y={y}&r={r}",
+            arguments = listOf(
+                androidx.navigation.navArgument("x") { defaultValue = "0.0" },
+                androidx.navigation.navArgument("y") { defaultValue = "0.0" },
+                androidx.navigation.navArgument("r") { defaultValue = "0.0" }
+            )
+        ) { backStackEntry ->
+            val x = backStackEntry.arguments?.getString("x")?.toDoubleOrNull() ?: 0.0
+            val y = backStackEntry.arguments?.getString("y")?.toDoubleOrNull() ?: 0.0
+            val r = backStackEntry.arguments?.getString("r")?.toDoubleOrNull() ?: 0.0
+
             PoseSelectorMainView(
                 onBack = {
                     navController.popBackStack()
                 },
-                onConfirm = { offset, rotation ->
-                    // FRC Coords: X is Depth (Up), Y is Width (Left)
-                    // Offset.y negative -> Up
-                    // Offset.x negative -> Left
-                    val frcX = -offset.y / 10f
-                    val frcY = -offset.x / 10f
-                    
-                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_x", frcX.toDouble())
-                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_y", frcY.toDouble())
-                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_r", rotation.toDouble())
-                }
+                onConfirm = { confirmX, confirmY, confirmR ->
+                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_x", confirmX)
+                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_y", confirmY)
+                    navController.previousBackStackEntry?.savedStateHandle?.set("pose_r", confirmR)
+                },
+                initialX = x,
+                initialY = y,
+                initialR = r
             )
         }
     }
