@@ -13,6 +13,9 @@ object RobotPoseManager {
     private val _isPoseValid = MutableStateFlow(false)
     val isPoseValid: StateFlow<Boolean> = _isPoseValid.asStateFlow()
 
+    private val _isRedAlliance = MutableStateFlow(false)
+    val isRedAlliance: StateFlow<Boolean> = _isRedAlliance.asStateFlow()
+
     private var lastUpdateTime = 0L
 
     fun updateX(x: Double) {
@@ -31,8 +34,14 @@ object RobotPoseManager {
 
     fun updateRotation(rotation: Double) {
         updateLastTime()
+        // Invert rotation: user reported clockwise in AdvantageScope is counter-clockwise in app.
+        // FRC/AdvantageKit typically use CCW positive.
+        // Compose graphicsLayer.rotationZ uses CW positive.
+        // So if AdvantageKit gives us CW positive, we need to invert it for our logic if we want to match.
+        // Wait, AdvantageKit/WPILib use CCW positive.
+        // If "clockwise in AdvantageScope goes counter clockwise in app", it means our app's rotation direction is inverted relative to AdvantageScope.
         _livePose.update { current ->
-            current.toBuilder().setRotation(rotation).build()
+            current.toBuilder().setRotation(-rotation).build()
         }
     }
 
@@ -41,8 +50,12 @@ object RobotPoseManager {
         _livePose.value = Pose2d.newBuilder()
             .setX(x)
             .setY(y)
-            .setRotation(rotation)
+            .setRotation(-rotation) // Invert rotation
             .build()
+    }
+
+    fun updateAlliance(isRed: Boolean) {
+        _isRedAlliance.value = isRed
     }
 
     private fun updateLastTime() {
@@ -52,8 +65,6 @@ object RobotPoseManager {
 
     // Bot stays visible at last known position
     fun checkValidity() {
-        // We keep it valid once we've received at least one pose
-        // or we could have a "stale" indicator, but user wants it to stay.
         if (lastUpdateTime == 0L) {
             _isPoseValid.value = false
         } else {

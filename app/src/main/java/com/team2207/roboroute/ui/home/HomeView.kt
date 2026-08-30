@@ -4,20 +4,27 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -46,18 +56,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.team2207.roboroute.R
 import com.team2207.roboroute.datastore.CustomButton
+import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
+import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
+import com.team2207.roboroute.ui.action.RobotVisual
+import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
-import com.team2207.roboroute.ui.components.FullScreenImage
-import kotlin.math.roundToInt
 import kotlin.math.min
-
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.graphicsLayer
-import com.team2207.roboroute.ui.action.RobotVisual
-import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
-import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
+import kotlin.math.roundToInt
 
 @Composable
 fun MainView(
@@ -70,6 +76,7 @@ fun MainView(
     val appData by viewModel.appData.collectAsState()
     val livePose by viewModel.livePose.collectAsState()
     val isPoseValid by viewModel.isPoseValid.collectAsState()
+    val isRedAlliance by viewModel.isRedAlliance.collectAsState()
 
     Scaffold(
         modifier = modifier.fillMaxSize()
@@ -89,14 +96,23 @@ fun MainView(
             val fitWidthDp = (imgSize.width * scale / density).dp
             val fitHeightDp = (imgSize.height * scale / density).dp
 
-            FullScreenImage(
-                modifier = Modifier.fillMaxSize()
-            )
+            val fieldRotation = if (isRedAlliance) 0f else 180f
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationZ = fieldRotation }
+            ) {
+                FullScreenImage(
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
             Box(
                 modifier = Modifier
                     .size(fitWidthDp, fitHeightDp)
                     .align(Alignment.Center)
+                    .graphicsLayer { rotationZ = fieldRotation }
             ) {
                 if (isPoseValid) {
                     val xMeter = livePose.x
@@ -130,6 +146,7 @@ fun MainView(
                                 viewModel.updateButton(button.id, x, y, r, actionId)
                             },
                             onDelete = { viewModel.deleteButton(button.id) },
+                            onCreateNewAction = onNavigateToSettings,
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx
@@ -196,6 +213,7 @@ fun CircularButton(
     isEditing: Boolean,
     onUpdate: (Float, Float, Float, Int) -> Unit,
     onDelete: () -> Unit,
+    onCreateNewAction: () -> Unit,
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
     maxHeight: Float
@@ -217,6 +235,9 @@ fun CircularButton(
         }
     }
 
+    val primaryColor = returnPrimaryColor()
+    val secondaryColor = returnSecondaryColor()
+
     Box(
         modifier = Modifier
             .offset {
@@ -225,40 +246,78 @@ fun CircularButton(
                     (localY * maxHeight - localRadius).roundToInt()
                 )
             }
-            .size(with(density) { (localRadius * 2).toDp() })
-            .clip(CircleShape)
-            .background(
-                if (isEditing) returnPrimaryColor().copy(alpha = 0.5f)
-                else returnPrimaryColor()
-            )
-            .border(2.dp, returnSecondaryColor(), CircleShape)
-            .pointerInput(button.id, isEditing) {
-                if (isEditing) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        isInteracting = true
-                        localRadius = (localRadius * zoom).coerceIn(40f, 600f)
-                        localX = (localX + pan.x / maxWidth).coerceIn(0f, 1f)
-                        localY = (localY + pan.y / maxHeight).coerceIn(0f, 1f)
-                        onUpdate(localX, localY, localRadius, button.actionId)
-                        // Note: In a real app, you might want to use a Coroutine to reset isInteracting after some idle time
-                    }
-                }
-            }
-            .clickable {
-                if (isEditing) {
-                    showActionDialog = true
-                } else {
-                    println("Executing action: ${assignedAction?.name}")
-                }
-            },
+            .size(with(density) { (localRadius * 2).toDp() }),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = assignedAction?.name ?: if (isEditing) "+" else "",
-            color = Color.White,
-            fontSize = with(density) { (localRadius / 3).toSp() },
-            fontWeight = FontWeight.Bold
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(
+                    if (isEditing) primaryColor.copy(alpha = 0.5f)
+                    else primaryColor
+                )
+                .border(2.dp, secondaryColor, CircleShape)
+                .pointerInput(button.id, isEditing) {
+                    if (isEditing) {
+                        detectDragGestures(
+                            onDragStart = { isInteracting = true },
+                            onDragEnd = { isInteracting = false },
+                            onDragCancel = { isInteracting = false }
+                        ) { change, dragAmount ->
+                            change.consume()
+                            localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
+                            localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
+                            onUpdate(localX, localY, localRadius, button.actionId)
+                        }
+                    }
+                }
+                .clickable {
+                    if (isEditing) {
+                        showActionDialog = true
+                    } else {
+                        println("Executing action: ${assignedAction?.name}")
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = assignedAction?.name ?: if (isEditing) "+" else "",
+                color = Color.White,
+                fontSize = with(density) { (localRadius / 3).toSp() },
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (isEditing) {
+            // Resize handles in corners
+            listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd).forEach { alignment ->
+                Box(
+                    modifier = Modifier
+                        .align(alignment)
+                        .size(28.dp)
+                        .padding(4.dp)
+                        .clip(CircleShape)
+                        .background(secondaryColor)
+                        .border(1.dp, primaryColor, CircleShape)
+                        .pointerInput(button.id, alignment) {
+                            detectDragGestures(
+                                onDragStart = { isInteracting = true },
+                                onDragEnd = { isInteracting = false },
+                                onDragCancel = { isInteracting = false }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                // Corner-aware resizing
+                                val factorX = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) -1 else 1
+                                val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
+                                val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
+                                localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
+                                onUpdate(localX, localY, localRadius, button.actionId)
+                            }
+                        }
+                )
+            }
+        }
     }
 
     if (showActionDialog && isEditing) {
@@ -266,28 +325,55 @@ fun CircularButton(
             onDismissRequest = { showActionDialog = false },
             title = { Text("Configure Button") },
             text = {
-                Column {
-                    Text("Select Action:")
-                    actions.forEach { action ->
-                        ListItem(
-                            headlineContent = { Text(action.name) },
-                            modifier = Modifier.clickable {
-                                onUpdate(button.x, button.y, button.radius, action.id)
-                                showActionDialog = false
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Select Action:", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.size(8.dp))
+                    
+                    if (actions.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                            Text("No actions available. Create one first!", color = Color.Gray, fontSize = 14.sp)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                            items(actions) { action ->
+                                ListItem(
+                                    headlineContent = { Text(action.name) },
+                                    modifier = Modifier.clickable {
+                                        onUpdate(button.x, button.y, button.radius, action.id)
+                                        showActionDialog = false
+                                    }
+                                )
                             }
-                        )
+                        }
                     }
-                    TextButton(
-                        onClick = onDelete,
-                        modifier = Modifier.align(Alignment.End)
+                    
+                    Spacer(modifier = Modifier.size(16.dp))
+                    Button(
+                        onClick = { 
+                            showActionDialog = false
+                            onCreateNewAction() 
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Delete Button", color = Color.Red)
+                        Text("Create New Action")
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showActionDialog = false }) {
-                    Text("Cancel")
+                    Text("Close")
+                }
+            },
+            dismissButton = {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    TextButton(
+                        onClick = {
+                            onDelete()
+                            showActionDialog = false
+                        }
+                    ) {
+                        Text("Delete Button", color = Color.Red)
+                    }
                 }
             }
         )

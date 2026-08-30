@@ -24,6 +24,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val livePose: StateFlow<Pose2d> = RobotPoseManager.livePose
     val isPoseValid: StateFlow<Boolean> = RobotPoseManager.isPoseValid
+    val isRedAlliance: StateFlow<Boolean> = RobotPoseManager.isRedAlliance
 
     init {
         viewModelScope.launch {

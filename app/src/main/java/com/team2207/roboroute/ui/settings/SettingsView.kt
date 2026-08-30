@@ -62,7 +62,7 @@ import com.team2207.roboroute.ui.theme.returnSecondaryColor
 @Composable
 fun SettingsView(
     onBack: () -> Unit,
-    onEditPose: (Double, Double, Double) -> Unit,
+    onEditPose: (Double, Double, Double, Double, Double) -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = viewModel()
@@ -214,7 +214,7 @@ fun SettingsView(
                         draftPose = null
                         editingAction = null
                     },
-                    onEditPose = { x, y, r -> onEditPose(x, y, r) },
+                    onEditPose = { x, y, r -> onEditPose(x, y, r, appData.robotWidth, appData.robotLength) },
                     showSheetInitial = showSheet,
                     onSheetVisibilityChange = { 
                         showSheet = it
@@ -250,6 +250,17 @@ fun SettingsView(
                 }
 
                 Spacer(modifier = Modifier.padding(8.dp))
+                
+                Button(
+                    onClick = { viewModel.manualSubscribe() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonColors(containerColor = returnPrimaryColor(), contentColor = returnSecondaryColor(), disabledContainerColor = Color.Gray, disabledContentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Check Alliance / Re-Subscribe")
+                }
+
+                Spacer(modifier = Modifier.padding(4.dp))
                 
                 Button(
                     onClick = { showLogSheet = true },

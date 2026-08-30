@@ -48,6 +48,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
     private val seenKeys = mutableSetOf<String>()
 
     private val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
+    private val ALLIANCE_PATH = "FMSInfo/isRedAlliance"
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -97,9 +98,21 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
         // Listen for manual subscribe triggers
         scope.launch {
             AoaSubscribeTrigger.events.collect {
-                if (currentNtPath.isNotEmpty()) {
+                if (outputStream != null) {
                     SerialLogManager.addLog("AOA: Manual subscription triggered")
-                    subscribe(currentNtPath)
+                    if (currentNtPath.isNotEmpty()) subscribe(currentNtPath)
+                    subscribe(ALLIANCE_PATH)
+                }
+            }
+        }
+
+        // Periodic Alliance check (every minute)
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60000)
+                if (outputStream != null) {
+                    SerialLogManager.addLog("AOA: Periodic Alliance check...")
+                    subscribe(ALLIANCE_PATH)
                 }
             }
         }
@@ -127,7 +140,9 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
             SerialLogManager.addLog("AOA: Error - outputStream is null, cannot send SUB")
             return
         }
-        val subscribeMessage = mapOf("subscribe" to listOf(path))
+        // Normalize path: leading slash if not present
+        val normalizedPath = if (path.startsWith("/")) path else "/$path"
+        val subscribeMessage = mapOf("subscribe" to listOf(normalizedPath))
         val json = gson.toJson(subscribeMessage) + "\n"
         try {
             val bytes = json.toByteArray()
@@ -186,12 +201,11 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
             
             SerialLogManager.addLog("AOA: Accessory opened successfully")
             
-            // Initial subscription
-            if (currentNtPath.isNotEmpty()) {
-                scope.launch {
-                    kotlinx.coroutines.delay(1000)
-                    subscribe(currentNtPath)
-                }
+            // Initial subscriptions
+            scope.launch {
+                kotlinx.coroutines.delay(1000)
+                if (currentNtPath.isNotEmpty()) subscribe(currentNtPath)
+                subscribe(ALLIANCE_PATH)
             }
         } else {
             SerialLogManager.addLog("AOA: Error - Failed to open accessory descriptor")
@@ -260,10 +274,20 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                     SerialLogManager.addLog("AOA: Received topic: $key")
                 }
                 
+                // Handle Alliance Color
+                if (key.endsWith(ALLIANCE_PATH)) {
+                    if (valueElement.isJsonPrimitive) {
+                        RobotPoseManager.updateAlliance(valueElement.asBoolean)
+                    }
+                    return
+                }
+                
                 if (currentNtPath.isEmpty()) return
 
+                val normalizedPath = if (currentNtPath.startsWith("/")) currentNtPath else "/$currentNtPath"
+
                 // Case 1: Full Pose2d match
-                if (key == currentNtPath || key == "/$currentNtPath") {
+                if (key == normalizedPath) {
                     if (valueElement.isJsonArray) {
                         val arr = valueElement.asJsonArray
                         if (arr.size() >= 3) {
@@ -284,8 +308,8 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                 }
                 
                 // Case 2: Individual components
-                if (key.startsWith(currentNtPath)) {
-                    val subKey = key.substringAfter(currentNtPath).removePrefix("/")
+                if (key.startsWith(normalizedPath)) {
+                    val subKey = key.substringAfter(normalizedPath).removePrefix("/")
                     if (valueElement.isJsonPrimitive) {
                         val value = valueElement.asDouble
                         when (subKey.uppercase()) {
