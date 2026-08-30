@@ -62,7 +62,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         .setId(newId)
                         .setX(0.5f)
                         .setY(0.5f)
-                        .setRadius(50f)
+                        .setRadius(100f)
                         .build()
                 )
             }

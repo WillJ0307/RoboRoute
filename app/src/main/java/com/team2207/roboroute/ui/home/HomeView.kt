@@ -93,19 +93,15 @@ fun MainView(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Field-relative container
             Box(
                 modifier = Modifier
                     .size(fitWidthDp, fitHeightDp)
                     .align(Alignment.Center)
             ) {
-                // Live Robot Pose
                 if (isPoseValid) {
                     val xMeter = livePose.x
                     val yMeter = livePose.y
                     
-                    // X is depth (vertical), Y is width (horizontal).
-                    // (0,0) is bottom-right. Shifting Left/Up.
                     val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
                     val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
                     
@@ -125,7 +121,6 @@ fun MainView(
                     )
                 }
 
-                // Layout Buttons
                 layout.buttonsList.forEach { button ->
                     androidx.compose.runtime.key(button.id) {
                         CircularButton(
@@ -241,10 +236,11 @@ fun CircularButton(
                 if (isEditing) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         isInteracting = true
-                        localRadius = (localRadius * zoom).coerceIn(40f, 400f)
+                        localRadius = (localRadius * zoom).coerceIn(40f, 600f)
                         localX = (localX + pan.x / maxWidth).coerceIn(0f, 1f)
                         localY = (localY + pan.y / maxHeight).coerceIn(0f, 1f)
                         onUpdate(localX, localY, localRadius, button.actionId)
+                        // Note: In a real app, you might want to use a Coroutine to reset isInteracting after some idle time
                     }
                 }
             }
