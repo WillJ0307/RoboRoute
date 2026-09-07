@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'RoboRoute Docs',
   tagline: 'AutoAlign made simple',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/logo.svg',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -59,6 +59,17 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      {
+        hashed: true,
+        searchBarShortcut: false,
+        searchBarPosition: 'right',
+      },
+    ],
+  ],
+
   themeConfig: {
     colorMode: {
       respectPrefersColorScheme: true,
@@ -77,6 +88,10 @@ const config: Config = {
           label: 'Docs',
         },
         // {to: '/blog', label: 'Blog', position: 'left'},
+        {
+          type: 'search',
+          position: 'right',
+        },
         {
           type: 'docsVersionDropdown',
           position: 'right',
