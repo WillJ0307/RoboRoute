@@ -16,6 +16,7 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
+          distribution: 'temurin'
           java-version: '17'
           cache: 'gradle' # Automatically caches Gradle dependencies to speed up future builds
 
