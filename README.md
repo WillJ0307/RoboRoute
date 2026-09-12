@@ -1,4 +1,7 @@
-![Logo](/assets/logo.svg){width=300px height=200px}
+<p align="center">
+  <img src="./assets/logo.svg" width="300" alt="Logo">
+</p>
+
 # RoboRoute
 
 The Docs are located at https://frc2207.github.io/RoboRoute
