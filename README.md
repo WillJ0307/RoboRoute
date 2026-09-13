@@ -5,7 +5,7 @@
 # RoboRoute
 
 > [!NOTE]
-> This project was made mostly using AI, we are students trying to learn and create a project quickly, the docs were written by a human to ensure correctness
+> This project was made with some use of Artificial Intelligence, we are students trying to learn and create a project quickly, the docs were written by a human to ensure correctness.
 
 The Docs are located at https://frc2207.github.io/RoboRoute
 
