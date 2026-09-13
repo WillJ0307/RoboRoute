@@ -11,7 +11,6 @@ try:
 except Exception:  # noqa: BLE001 - import raises NoImplementationFoundException
     crossfiledialog = None
 import usb.core
-
 from classes.apk_installer import install_apk
 from classes.bridge import NTOverUSBBridge
 
@@ -316,9 +315,7 @@ class TKApp:
             )
             return
 
-        self.apk_install_btn.config(
-            state=tk.DISABLED, text="Installing..."
-        )
+        self.apk_install_btn.config(state=tk.DISABLED, text="Installing...")
 
         self._install_thread = threading.Thread(
             target=self._install_apk_worker,

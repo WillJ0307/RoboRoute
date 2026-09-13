@@ -12,7 +12,9 @@ TOPIC_RESEND_INTERVAL = 10.0
 
 
 class NTOverUSBBridge:
-    def __init__(self, usb=None, nt=None, on_log=None, on_state=None, on_subscription=None):
+    def __init__(
+        self, usb=None, nt=None, on_log=None, on_state=None, on_subscription=None
+    ):
         self.usb = usb or USBHandler()
         self.nt = nt or NTHandler()
         self.subscriptions = SubscriptionState()
