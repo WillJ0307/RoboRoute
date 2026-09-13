@@ -17,10 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
@@ -29,46 +27,57 @@ import java.io.OutputStream
 
 object AoaSubscribeTrigger {
     val events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     fun trigger() {
         events.tryEmit(Unit)
     }
 }
 
-class AoaPoseReceiver(private val context: Context, private val repository: ActionRepository) {
+class AoaPoseReceiver(
+    private val context: Context,
+    private val repository: ActionRepository,
+) {
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private var accessory: UsbAccessory? = null
     private var fileDescriptor: ParcelFileDescriptor? = null
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
-    
+
     private val scope = CoroutineScope(Dispatchers.IO)
     private val gson = Gson()
-    
+
     private var currentNtPath: String = ""
     private val seenKeys = mutableSetOf<String>()
 
-    private val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
-    private val ALLIANCE_PATH = "FMSInfo/isRedAlliance"
+    companion object {
+        private const val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
+        private const val ALLIANCE_PATH = "FMSInfo/isRedAlliance"
+    }
 
-    private val usbReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (ACTION_USB_PERMISSION == intent.action) {
-                synchronized(this) {
-                    val usbAccessory: UsbAccessory? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
-                    }
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        usbAccessory?.let { openAccessory(it) }
-                    } else {
-                        SerialLogManager.addLog("AOA: USB Permission denied")
+    private val usbReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                if (ACTION_USB_PERMISSION == intent.action) {
+                    synchronized(this) {
+                        val usbAccessory: UsbAccessory? =
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+                            }
+                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                            usbAccessory?.let { openAccessory(it) }
+                        } else {
+                            SerialLogManager.addLog("AOA: USB Permission denied")
+                        }
                     }
                 }
             }
         }
-    }
 
     fun start() {
         SerialLogManager.addLog("AOA: Receiver instance starting...")
@@ -121,15 +130,16 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
     fun handleIntent(intent: Intent) {
         SerialLogManager.addLog("AOA: Handling intent: ${intent.action}")
         if (UsbManager.ACTION_USB_ACCESSORY_ATTACHED == intent.action) {
-            val usbAccessory: UsbAccessory? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
-            }
-            usbAccessory?.let { 
+            val usbAccessory: UsbAccessory? =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+                }
+            usbAccessory?.let {
                 SerialLogManager.addLog("AOA: Accessory from intent: ${it.model}")
-                openAccessory(it) 
+                openAccessory(it)
             }
         }
     }
@@ -157,7 +167,8 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
     fun stop() {
         try {
             context.unregisterReceiver(usbReceiver)
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+        }
         scope.cancel()
         closeAccessory()
     }
@@ -171,7 +182,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
 
         SerialLogManager.addLog("AOA: Found ${accessories.size} accessories")
         val target = accessories[0]
-        
+
         if (usbManager.hasPermission(target)) {
             openAccessory(target)
         } else {
@@ -187,7 +198,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
             SerialLogManager.addLog("AOA: Accessory already open, closing old one first")
             closeAccessory()
         }
-        
+
         seenKeys.clear()
         SerialLogManager.addLog("AOA: Opening accessory: ${usbAccessory.model}")
         fileDescriptor = usbManager.openAccessory(usbAccessory)
@@ -196,11 +207,11 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
             val fd = fileDescriptor!!.fileDescriptor
             inputStream = FileInputStream(fd)
             outputStream = FileOutputStream(fd)
-            
+
             startReading()
-            
+
             SerialLogManager.addLog("AOA: Accessory opened successfully")
-            
+
             // Initial subscriptions
             scope.launch {
                 kotlinx.coroutines.delay(1000)
@@ -215,7 +226,8 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
     private fun closeAccessory() {
         try {
             fileDescriptor?.close()
-        } catch (e: IOException) {}
+        } catch (e: IOException) {
+        }
         fileDescriptor = null
         accessory = null
         inputStream = null
@@ -235,7 +247,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                     if (bytesRead > 0) {
                         val data = String(buffer, 0, bytesRead)
                         stringBuffer += data
-                        
+
                         // Log "Data received" at most once per second to avoid flooding
                         val now = System.currentTimeMillis()
                         if (now - lastDataLogTime > 1000) {
@@ -247,7 +259,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                             val index = stringBuffer.indexOf("\n")
                             val line = stringBuffer.substring(0, index).trim()
                             stringBuffer = stringBuffer.substring(index + 1)
-                            
+
                             if (line.isNotEmpty()) {
                                 parseLine(line)
                             }
@@ -269,11 +281,11 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                 val json = gson.fromJson(line, JsonObject::class.java)
                 val key = json.get("key")?.asString ?: return
                 val valueElement = json.get("value") ?: return
-                
+
                 if (seenKeys.add(key)) {
                     SerialLogManager.addLog("AOA: Received topic: $key")
                 }
-                
+
                 // Handle Alliance Color
                 if (key.endsWith(ALLIANCE_PATH)) {
                     if (valueElement.isJsonPrimitive) {
@@ -281,7 +293,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                     }
                     return
                 }
-                
+
                 if (currentNtPath.isEmpty()) return
 
                 val normalizedPath = if (currentNtPath.startsWith("/")) currentNtPath else "/$currentNtPath"
@@ -296,8 +308,18 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                         }
                     } else if (valueElement.isJsonObject) {
                         val obj = valueElement.asJsonObject
-                        val x = obj.get("x")?.asDouble ?: obj.get("translation")?.asJsonObject?.get("x")?.asDouble
-                        val y = obj.get("y")?.asDouble ?: obj.get("translation")?.asJsonObject?.get("y")?.asDouble
+                        val x =
+                            obj.get("x")?.asDouble ?: obj
+                                .get("translation")
+                                ?.asJsonObject
+                                ?.get("x")
+                                ?.asDouble
+                        val y =
+                            obj.get("y")?.asDouble ?: obj
+                                .get("translation")
+                                ?.asJsonObject
+                                ?.get("y")
+                                ?.asDouble
                         val rotElement = obj.get("rotation") ?: obj.get("rot") ?: obj.get("r")
                         val rotation = rotElement?.let { if (it.isJsonObject) it.asJsonObject.get("value")?.asDouble else it.asDouble }
                         if (x != null && y != null && rotation != null) {
@@ -306,7 +328,7 @@ class AoaPoseReceiver(private val context: Context, private val repository: Acti
                         }
                     }
                 }
-                
+
                 // Case 2: Individual components
                 if (key.startsWith(normalizedPath)) {
                     val subKey = key.substringAfter(normalizedPath).removePrefix("/")

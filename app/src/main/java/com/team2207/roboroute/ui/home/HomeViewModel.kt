@@ -8,6 +8,8 @@ import com.team2207.roboroute.datastore.AppData
 import com.team2207.roboroute.datastore.ButtonLayout
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.datastore.LayoutRepository
+import com.team2207.roboroute.datastore.Pose2d
+import com.team2207.roboroute.serial.RobotPoseManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,10 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-import com.team2207.roboroute.datastore.Pose2d
-import com.team2207.roboroute.serial.RobotPoseManager
-
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
     private val layoutRepository = LayoutRepository(application)
     private val actionRepository = ActionRepository(application)
 
@@ -35,17 +36,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    val layout: StateFlow<ButtonLayout> = layoutRepository.layoutFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ButtonLayout.getDefaultInstance()
-    )
+    val layout: StateFlow<ButtonLayout> =
+        layoutRepository.layoutFlow.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ButtonLayout.getDefaultInstance(),
+        )
 
-    val appData: StateFlow<AppData> = actionRepository.appDataFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = AppData.getDefaultInstance()
-    )
+    val appData: StateFlow<AppData> =
+        actionRepository.appDataFlow.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AppData.getDefaultInstance(),
+        )
 
     private val _isEditing = MutableStateFlow(false)
     val isEditing: StateFlow<Boolean> = _isEditing.asStateFlow()
@@ -59,28 +62,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             layoutRepository.updateLayout { builder ->
                 val newId = (builder.buttonsList.maxOfOrNull { it.id } ?: 0) + 1
                 builder.addButtons(
-                    CustomButton.newBuilder()
+                    CustomButton
+                        .newBuilder()
                         .setId(newId)
                         .setX(0.5f)
                         .setY(0.5f)
                         .setRadius(100f)
-                        .build()
+                        .build(),
                 )
             }
         }
     }
 
-    fun updateButton(buttonId: Int, x: Float, y: Float, radius: Float, actionId: Int) {
+    fun updateButton(
+        buttonId: Int,
+        x: Float,
+        y: Float,
+        radius: Float,
+        actionId: Int,
+    ) {
         viewModelScope.launch {
             layoutRepository.updateLayout { builder ->
                 val index = builder.buttonsList.indexOfFirst { it.id == buttonId }
                 if (index != -1) {
-                    builder.setButtons(index, builder.getButtons(index).toBuilder()
-                        .setX(x)
-                        .setY(y)
-                        .setRadius(radius)
-                        .setActionId(actionId)
-                        .build()
+                    builder.setButtons(
+                        index,
+                        builder
+                            .getButtons(index)
+                            .toBuilder()
+                            .setX(x)
+                            .setY(y)
+                            .setRadius(radius)
+                            .setActionId(actionId)
+                            .build(),
                     )
                 }
             }

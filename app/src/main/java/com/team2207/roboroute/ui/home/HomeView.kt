@@ -1,15 +1,12 @@
 package com.team2207.roboroute.ui.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,7 +43,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,7 +65,7 @@ import kotlin.math.roundToInt
 fun MainView(
     onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: HomeViewModel = viewModel()
+    viewModel: HomeViewModel = viewModel(),
 ) {
     val isEditing by viewModel.isEditing.collectAsState()
     val layout by viewModel.layout.collectAsState()
@@ -79,16 +75,17 @@ fun MainView(
     val isRedAlliance by viewModel.isRedAlliance.collectAsState()
 
     Scaffold(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
         ) {
             val maxWidthPx = constraints.maxWidth.toFloat()
             val maxHeightPx = constraints.maxHeight.toFloat()
-            
+
             val painter = painterResource(id = R.drawable.field_2026)
             val imgSize = painter.intrinsicSize
             val scale = min(maxWidthPx / imgSize.width, maxHeightPx / imgSize.height)
@@ -99,41 +96,44 @@ fun MainView(
             val fieldRotation = if (isRedAlliance) 0f else 180f
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { rotationZ = fieldRotation }
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationZ = fieldRotation },
             ) {
                 FullScreenImage(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
             Box(
-                modifier = Modifier
-                    .size(fitWidthDp, fitHeightDp)
-                    .align(Alignment.Center)
-                    .graphicsLayer { rotationZ = fieldRotation }
+                modifier =
+                    Modifier
+                        .size(fitWidthDp, fitHeightDp)
+                        .align(Alignment.Center)
+                        .graphicsLayer { rotationZ = fieldRotation },
             ) {
                 if (isPoseValid) {
                     val xMeter = livePose.x
                     val yMeter = livePose.y
-                    
+
                     val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
                     val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
-                    
+
                     val robotWidthDp = (appData.robotWidth / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
                     val robotLengthDp = (appData.robotLength / FIELD_WIDTH_METERS * fitHeightDp.value).dp
 
                     RobotVisual(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
-                            .graphicsLayer {
-                                rotationZ = Math.toDegrees(livePose.rotation).toFloat()
-                            },
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
+                                .graphicsLayer {
+                                    rotationZ = Math.toDegrees(livePose.rotation).toFloat()
+                                },
                         showControls = false,
                         robotWidth = robotWidthDp,
-                        robotLength = robotLengthDp
+                        robotLength = robotLengthDp,
                     )
                 }
 
@@ -149,7 +149,7 @@ fun MainView(
                             onCreateNewAction = onNavigateToSettings,
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
-                            maxHeight = maxHeightPx
+                            maxHeight = maxHeightPx,
                         )
                     }
                 }
@@ -157,26 +157,29 @@ fun MainView(
 
             if (isEditing) {
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(16.dp),
                 ) {
                     IconButton(
                         onClick = { viewModel.setEditing(false) },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = returnPrimaryColor(),
-                            contentColor = returnSecondaryColor()
-                        )
+                        colors =
+                            IconButtonDefaults.iconButtonColors(
+                                containerColor = returnPrimaryColor(),
+                                contentColor = returnSecondaryColor(),
+                            ),
                     ) {
                         Icon(Icons.Default.Check, contentDescription = "Done")
                     }
                     IconButton(
                         onClick = { viewModel.addButton() },
                         modifier = Modifier.padding(top = 8.dp),
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = returnPrimaryColor(),
-                            contentColor = returnSecondaryColor()
-                        )
+                        colors =
+                            IconButtonDefaults.iconButtonColors(
+                                containerColor = returnPrimaryColor(),
+                                contentColor = returnSecondaryColor(),
+                            ),
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Add Button")
                     }
@@ -185,9 +188,10 @@ fun MainView(
                 MenuButton(
                     onSettingsClick = onNavigateToSettings,
                     onEditLayoutClick = { viewModel.setEditing(true) },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(end = 30.dp)
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 30.dp),
                 )
             }
         }
@@ -202,7 +206,7 @@ fun MainView(
                 TextButton(onClick = onNavigateToSettings) {
                     Text("Check Settings")
                 }
-            }
+            },
         )
     }
 }
@@ -216,7 +220,7 @@ fun CircularButton(
     onCreateNewAction: () -> Unit,
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
-    maxHeight: Float
+    maxHeight: Float,
 ) {
     var showActionDialog by remember { mutableStateOf(false) }
     val assignedAction = actions.find { it.id == button.actionId }
@@ -239,53 +243,55 @@ fun CircularButton(
     val secondaryColor = returnSecondaryColor()
 
     Box(
-        modifier = Modifier
-            .offset {
-                IntOffset(
-                    (localX * maxWidth - localRadius).roundToInt(),
-                    (localY * maxHeight - localRadius).roundToInt()
-                )
-            }
-            .size(with(density) { (localRadius * 2).toDp() }),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .offset {
+                    IntOffset(
+                        (localX * maxWidth - localRadius).roundToInt(),
+                        (localY * maxHeight - localRadius).roundToInt(),
+                    )
+                }.size(with(density) { (localRadius * 2).toDp() }),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .background(
-                    if (isEditing) primaryColor.copy(alpha = 0.5f)
-                    else primaryColor
-                )
-                .border(2.dp, secondaryColor, CircleShape)
-                .pointerInput(button.id, isEditing) {
-                    if (isEditing) {
-                        detectDragGestures(
-                            onDragStart = { isInteracting = true },
-                            onDragEnd = { isInteracting = false },
-                            onDragCancel = { isInteracting = false }
-                        ) { change, dragAmount ->
-                            change.consume()
-                            localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
-                            localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
-                            onUpdate(localX, localY, localRadius, button.actionId)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(
+                        if (isEditing) {
+                            primaryColor.copy(alpha = 0.5f)
+                        } else {
+                            primaryColor
+                        },
+                    ).border(2.dp, secondaryColor, CircleShape)
+                    .pointerInput(button.id, isEditing) {
+                        if (isEditing) {
+                            detectDragGestures(
+                                onDragStart = { isInteracting = true },
+                                onDragEnd = { isInteracting = false },
+                                onDragCancel = { isInteracting = false },
+                            ) { change, dragAmount ->
+                                change.consume()
+                                localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
+                                localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
+                                onUpdate(localX, localY, localRadius, button.actionId)
+                            }
                         }
-                    }
-                }
-                .clickable {
-                    if (isEditing) {
-                        showActionDialog = true
-                    } else {
-                        println("Executing action: ${assignedAction?.name}")
-                    }
-                },
-            contentAlignment = Alignment.Center
+                    }.clickable {
+                        if (isEditing) {
+                            showActionDialog = true
+                        } else {
+                            println("Executing action: ${assignedAction?.name}")
+                        }
+                    },
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = assignedAction?.name ?: if (isEditing) "+" else "",
                 color = Color.White,
                 fontSize = with(density) { (localRadius / 3).toSp() },
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
         }
 
@@ -293,28 +299,29 @@ fun CircularButton(
             // Resize handles in corners
             listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd).forEach { alignment ->
                 Box(
-                    modifier = Modifier
-                        .align(alignment)
-                        .size(28.dp)
-                        .padding(4.dp)
-                        .clip(CircleShape)
-                        .background(secondaryColor)
-                        .border(1.dp, primaryColor, CircleShape)
-                        .pointerInput(button.id, alignment) {
-                            detectDragGestures(
-                                onDragStart = { isInteracting = true },
-                                onDragEnd = { isInteracting = false },
-                                onDragCancel = { isInteracting = false }
-                            ) { change, dragAmount ->
-                                change.consume()
-                                // Corner-aware resizing
-                                val factorX = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) -1 else 1
-                                val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
-                                val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
-                                localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
-                                onUpdate(localX, localY, localRadius, button.actionId)
-                            }
-                        }
+                    modifier =
+                        Modifier
+                            .align(alignment)
+                            .size(28.dp)
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                            .background(secondaryColor)
+                            .border(1.dp, primaryColor, CircleShape)
+                            .pointerInput(button.id, alignment) {
+                                detectDragGestures(
+                                    onDragStart = { isInteracting = true },
+                                    onDragEnd = { isInteracting = false },
+                                    onDragCancel = { isInteracting = false },
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    // Corner-aware resizing
+                                    val factorX = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) -1 else 1
+                                    val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
+                                    val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
+                                    localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
+                                    onUpdate(localX, localY, localRadius, button.actionId)
+                                }
+                            },
                 )
             }
         }
@@ -328,7 +335,7 @@ fun CircularButton(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text("Select Action:", fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.size(8.dp))
-                    
+
                     if (actions.isEmpty()) {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                             Text("No actions available. Create one first!", color = Color.Gray, fontSize = 14.sp)
@@ -338,22 +345,23 @@ fun CircularButton(
                             items(actions) { action ->
                                 ListItem(
                                     headlineContent = { Text(action.name) },
-                                    modifier = Modifier.clickable {
-                                        onUpdate(button.x, button.y, button.radius, action.id)
-                                        showActionDialog = false
-                                    }
+                                    modifier =
+                                        Modifier.clickable {
+                                            onUpdate(button.x, button.y, button.radius, action.id)
+                                            showActionDialog = false
+                                        },
                                 )
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.size(16.dp))
                     Button(
-                        onClick = { 
+                        onClick = {
                             showActionDialog = false
-                            onCreateNewAction() 
+                            onCreateNewAction()
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Create New Action")
                     }
@@ -370,12 +378,12 @@ fun CircularButton(
                         onClick = {
                             onDelete()
                             showActionDialog = false
-                        }
+                        },
                     ) {
                         Text("Delete Button", color = Color.Red)
                     }
                 }
-            }
+            },
         )
     }
 }
@@ -384,32 +392,34 @@ fun CircularButton(
 fun MenuButton(
     onSettingsClick: () -> Unit,
     onEditLayoutClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         IconButton(
-            onClick = { expanded = true }, colors = IconButtonDefaults.iconButtonColors(
-                containerColor = returnPrimaryColor(),
-                contentColor = returnSecondaryColor()
-            )
+            onClick = { expanded = true },
+            colors =
+                IconButtonDefaults.iconButtonColors(
+                    containerColor = returnPrimaryColor(),
+                    contentColor = returnSecondaryColor(),
+                ),
         ) {
             Icon(
                 imageVector = Icons.Default.Menu,
-                contentDescription = "Menu"
+                contentDescription = "Menu",
             )
         }
 
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             TextButton(
                 onClick = {
                     expanded = false
                     onEditLayoutClick()
-                }
+                },
             ) {
                 Text("Edit layout", color = returnPrimaryColor())
             }
@@ -417,7 +427,7 @@ fun MenuButton(
                 onClick = {
                     expanded = false
                     onSettingsClick()
-                }
+                },
             ) {
                 Text("Settings", color = returnPrimaryColor())
             }

@@ -13,6 +13,6 @@ fun FullScreenImage(modifier: Modifier = Modifier) {
         painter = painterResource(id = R.drawable.field_2026),
         contentDescription = "Full screen background image",
         modifier = modifier,
-        contentScale = ContentScale.Fit
+        contentScale = ContentScale.Fit,
     )
 }

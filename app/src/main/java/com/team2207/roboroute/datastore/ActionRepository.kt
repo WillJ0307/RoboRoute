@@ -9,19 +9,21 @@ import java.io.IOException
 
 val Context.dataStore: DataStore<AppData> by dataStore(
     fileName = "app_data.pb",
-    serializer = AppDataSerializer
+    serializer = AppDataSerializer,
 )
 
-class ActionRepository(private val context: Context) {
-
-    val appDataFlow: Flow<AppData> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(AppData.getDefaultInstance())
-            } else {
-                throw exception
+class ActionRepository(
+    private val context: Context,
+) {
+    val appDataFlow: Flow<AppData> =
+        context.dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    emit(AppData.getDefaultInstance())
+                } else {
+                    throw exception
+                }
             }
-        }
 
     suspend fun addAction(action: Action) {
         context.dataStore.updateData { currentAppData ->
@@ -38,15 +40,20 @@ class ActionRepository(private val context: Context) {
 
     suspend fun updateNtPath(path: String) {
         context.dataStore.updateData { currentAppData ->
-            currentAppData.toBuilder()
+            currentAppData
+                .toBuilder()
                 .setNtPath(path)
                 .build()
         }
     }
 
-    suspend fun updateRobotDimensions(width: Double, length: Double) {
+    suspend fun updateRobotDimensions(
+        width: Double,
+        length: Double,
+    ) {
         context.dataStore.updateData { currentAppData ->
-            currentAppData.toBuilder()
+            currentAppData
+                .toBuilder()
                 .setRobotWidth(width)
                 .setRobotLength(length)
                 .build()

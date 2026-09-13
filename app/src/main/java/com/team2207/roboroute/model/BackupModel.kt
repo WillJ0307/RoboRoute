@@ -2,7 +2,7 @@ package com.team2207.roboroute.model
 
 data class BackupModel(
     val actions: List<ActionExport>,
-    val buttons: List<ButtonExport>
+    val buttons: List<ButtonExport>,
 )
 
 data class ActionExport(
@@ -12,7 +12,7 @@ data class ActionExport(
     val pose: PoseExport? = null,
     val pathName: String? = null,
     val ntKey: String? = null,
-    val ntData: String? = null
+    val ntData: String? = null,
 )
 
 data class ButtonExport(
@@ -20,11 +20,11 @@ data class ButtonExport(
     val x: Float,
     val y: Float,
     val radius: Float,
-    val actionId: Int
+    val actionId: Int,
 )
 
 data class PoseExport(
     val x: Double,
     val y: Double,
-    val rotation: Double
+    val rotation: Double,
 )

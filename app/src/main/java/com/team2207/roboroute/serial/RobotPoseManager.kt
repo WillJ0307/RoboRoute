@@ -7,7 +7,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 object RobotPoseManager {
-    private val _livePose = MutableStateFlow(Pose2d.newBuilder().setX(0.0).setY(0.0).setRotation(0.0).build())
+    private val _livePose =
+        MutableStateFlow(
+            Pose2d
+                .newBuilder()
+                .setX(0.0)
+                .setY(0.0)
+                .setRotation(0.0)
+                .build(),
+        )
     val livePose: StateFlow<Pose2d> = _livePose.asStateFlow()
 
     private val _isPoseValid = MutableStateFlow(false)
@@ -45,13 +53,19 @@ object RobotPoseManager {
         }
     }
 
-    fun updateFullPose(x: Double, y: Double, rotation: Double) {
+    fun updateFullPose(
+        x: Double,
+        y: Double,
+        rotation: Double,
+    ) {
         updateLastTime()
-        _livePose.value = Pose2d.newBuilder()
-            .setX(x)
-            .setY(y)
-            .setRotation(-rotation) // Invert rotation
-            .build()
+        _livePose.value =
+            Pose2d
+                .newBuilder()
+                .setX(x)
+                .setY(y)
+                .setRotation(-rotation) // Invert rotation
+                .build()
     }
 
     fun updateAlliance(isRed: Boolean) {

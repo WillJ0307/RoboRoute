@@ -17,5 +17,8 @@ object AppDataSerializer : Serializer<AppData> {
         }
     }
 
-    override suspend fun writeTo(t: AppData, output: OutputStream) = t.writeTo(output)
+    override suspend fun writeTo(
+        t: AppData,
+        output: OutputStream,
+    ) = t.writeTo(output)
 }

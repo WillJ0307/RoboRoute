@@ -4,9 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.team2207.roboroute.ui.action.PoseSelectorMainView
 import com.team2207.roboroute.ui.home.MainView
 import com.team2207.roboroute.ui.settings.SettingsView
-import com.team2207.roboroute.ui.action.PoseSelectorMainView
 
 const val HOME_SCREEN = "home"
 const val SETTINGS_SCREEN = "settings"
@@ -33,20 +33,21 @@ fun AppNavigation() {
                 onEditPose = { x, y, r, w, l ->
                     navController.navigate("$POSE_SELECTOR_SCREEN?x=$x&y=$y&r=$r&w=$w&l=$l")
                 },
-                navController = navController
+                navController = navController,
             )
         }
 
         // Pose Selector Route
         composable(
             route = "$POSE_SELECTOR_SCREEN?x={x}&y={y}&r={r}&w={w}&l={l}",
-            arguments = listOf(
-                androidx.navigation.navArgument("x") { defaultValue = "0.0" },
-                androidx.navigation.navArgument("y") { defaultValue = "0.0" },
-                androidx.navigation.navArgument("r") { defaultValue = "0.0" },
-                androidx.navigation.navArgument("w") { defaultValue = "0.6" },
-                androidx.navigation.navArgument("l") { defaultValue = "0.6" }
-            )
+            arguments =
+                listOf(
+                    androidx.navigation.navArgument("x") { defaultValue = "0.0" },
+                    androidx.navigation.navArgument("y") { defaultValue = "0.0" },
+                    androidx.navigation.navArgument("r") { defaultValue = "0.0" },
+                    androidx.navigation.navArgument("w") { defaultValue = "0.6" },
+                    androidx.navigation.navArgument("l") { defaultValue = "0.6" },
+                ),
         ) { backStackEntry ->
             val x = backStackEntry.arguments?.getString("x")?.toDoubleOrNull() ?: 0.0
             val y = backStackEntry.arguments?.getString("y")?.toDoubleOrNull() ?: 0.0
@@ -67,7 +68,7 @@ fun AppNavigation() {
                 initialY = y,
                 initialR = r,
                 robotWidthMeter = w,
-                robotLengthMeter = l
+                robotLengthMeter = l,
             )
         }
     }

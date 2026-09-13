@@ -17,7 +17,10 @@ object ButtonLayoutSerializer : Serializer<ButtonLayout> {
         }
     }
 
-    override suspend fun writeTo(t: ButtonLayout, output: OutputStream) {
+    override suspend fun writeTo(
+        t: ButtonLayout,
+        output: OutputStream,
+    ) {
         t.writeTo(output)
     }
 }
