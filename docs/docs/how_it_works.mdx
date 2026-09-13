@@ -1,0 +1,12 @@
+---
+title: How It Works
+sidebar_position: 1
+---
+
+RoboRoute is an Android app for the FIRST Robotics Competition, which allows drivers to draw a path on an Android tablet which the robot will follow, it can also be used with custom actions to for example to be used with premade auto align positions
+
+![Flowchart](/img/how_it_works_flowchart.png)
+
+Because the tablet can't connect to NetworkTables directly, we have a small peice of software (NTOverAOA) that takes the NetworkTables data and bridges it over **Android Open Accessory (AOA)**
+
+NTOverAOA also includes configuration tools to simplify driver and Android App installation
