@@ -24,6 +24,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
+        working-directory: NTOverAOA
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
@@ -33,6 +34,7 @@ jobs:
 
       - name: Build libwdi
         shell: pwsh
+        working-directory: NTOverAOA
         run: |
           $wdkInstaller = Join-Path $env:RUNNER_TEMP "wdfcoinstaller.msi"
           $wdkExtract = Join-Path $env:RUNNER_TEMP "wdk"
@@ -104,6 +106,7 @@ jobs:
 
       - name: Build one-file executable
         shell: pwsh
+        working-directory: NTOverAOA
         run: |
           $libusbDll = python -c "import pathlib,libusb; print(pathlib.Path(libusb.__file__).parent / '_platform' / 'windows' / 'x86_64' / 'libusb-1.0.dll')"
           python -m PyInstaller `
@@ -128,5 +131,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NTOverAOA-windows-x86_64
-          path: dist/NTOverAOA.exe
+          path: NTOverAOA/dist/NTOverAOA.exe
           if-no-files-found: error
