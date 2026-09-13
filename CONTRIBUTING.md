@@ -7,6 +7,18 @@ There are 3 parts to RoboRoute:
 ### What you'll need
 - [Android Studio](https://developer.android.com/studio)
 
+### Linting/Formating
+We use [ktlint](https://ktlint.github.io/ktlint) to help with formatting and code quality
+`ktlintCheck` will give a list of the issues, `ktlintFormat` will try to fix them
+
+- **Run in Androdid Studio**: Select `ktlintFormat` or `ktlintCheck` from the run dropdown at the top middle ish of the window
+- **Run via Command Line**:
+  - Check: `./gradlew ktlintCheck`
+  - Format: `./gradlew ktlintFormat`
+
+> [!NOTE]
+> always run `ktlintFormat` before commiting
+
 
 ## NTOverAOA
 ### What you'll need
@@ -23,6 +35,22 @@ git submodule update --init --recursive
 ```bash
 pip install -r requirements.txt
 ```
+
+### Linting/Formatting
+We use [Ruff](https://docs.astral.sh/ruff/) to help with formatting and code quality
+
+after installing the dependencies, in the terminal run 
+```
+ruff check
+```
+or
+```
+ruff format
+```
+
+> [!NOTE]
+> Always run `ruff format` before commiting
+
 
 ## Documentation (Docusarus)
 ### What you'll need
