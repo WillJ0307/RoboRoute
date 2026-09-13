@@ -5,12 +5,17 @@ sidebar_position: 2
 
 Download the latest release for your platform from https://github.com/FRC2207/RoboRoute/releases/latest
 
-Extract the files from the archive, and run the NTOverAOA application
+Extract all the files from the archive, and run the NTOverAOA application
 
 ### Installing the Android App
-Select the usb device in the connection tab
+On your device, turn on USB debugging by finding the build number under about and tapping it 7 times, now find the developer options menu in system settings, find "enable usb debugging" and turn it on
+Now on your computer, select the usb device in the connection tab of NTOverAOA it should show up as some numbers first, then a name like `17ef:201c LENOVO TB336FU`
 Navigate to the setup tab, and browse for an APK, select the one from the extracted directory and click install, there will be a prompt on the device that you will need to accept
 
 ### Driver Setup (Windows Only)
 Navigate to the setup tab, select the usb device, and click install driver
 :::danger[Selecting the wrong usb device can result in a system driver being replaced, or another usb device becomming unuseable]
+
+### Connecting
+Navigate to the connection tab, enter your robot's ip address (`10.TE.AM.2`) or `localhost` when using simulation, and click connect
+if this is the first time connecting you will need to manually open RoboRoute, there will be a dialog asking if you want to use this app every time for AOA connections, select yes, this will make the RoboRoute application automatically launch when connecting
