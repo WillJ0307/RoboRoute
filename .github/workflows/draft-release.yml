@@ -52,34 +52,6 @@ jobs:
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
           body: |
-            Each bundle pairs the NTOverAOA desktop app with the RoboRoute Android APK for this release.
-
-            ## Windows (x86_64)
-
-            `RoboRoute-${{ inputs.tag }}-windows-x86_64.zip`
-
-            ```powershell
-            tar -xf RoboRoute-${{ inputs.tag }}-windows-x86_64.zip
-            .\NTOverAOA.exe
-            ```
-
-            ## Linux (x86_64)
-
-            `RoboRoute-${{ inputs.tag }}-linux-x86_64.tar.gz`
-
-            ```bash
-            tar -xzf RoboRoute-${{ inputs.tag }}-linux-x86_64.tar.gz
-            ./NTOverAOA-linux-x86_64.run
-            ```
-
-            ## Linux (ARM64)
-
-            `RoboRoute-${{ inputs.tag }}-linux-arm64.tar.gz`
-
-            ```bash
-            tar -xzf RoboRoute-${{ inputs.tag }}-linux-arm64.tar.gz
-            ./NTOverAOA-linux-arm64.run
-            ```
 
             If the bundled executable is not marked as executable on Linux, run `chmod +x NTOverAOA-*` before launching it.
           files: release-assets/*
