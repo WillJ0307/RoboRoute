@@ -4,6 +4,9 @@
 
 # RoboRoute
 
+> [!NOTE]
+> This project was made mostly using AI, we are students trying to learn and create a project quickly, the docs were written by a human to ensure correctness
+
 The Docs are located at https://frc2207.github.io/RoboRoute
 
 Want to Contribute? Check out the `CONTRIBUTING.md` file
@@ -25,3 +28,5 @@ Download the latest release from https://github.com/frc2207/RoboRoute
 
 Done!
 Check out the [Docs](https://frc2207.github.io/RoboRoute) for more information
+
+If you have any problems, create a github issue
