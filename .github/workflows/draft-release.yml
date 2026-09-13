@@ -1,0 +1,57 @@
+name: Draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag, for example v1.2.0 or v1.2.0-beta
+        required: true
+        type: string
+      prerelease:
+        description: Mark this release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download bundles
+        uses: actions/download-artifact@v7
+        with:
+          name: RoboRoute-bundles
+          path: release-assets
+
+      - name: Attach version to bundle filenames
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          mv release-assets/RoboRoute-windows-x86_64.zip \
+            "release-assets/RoboRoute-windows-x86_64-${RELEASE_TAG}.zip"
+          mv release-assets/RoboRoute-linux-x86_64.tar.gz \
+            "release-assets/RoboRoute-linux-x86_64-${RELEASE_TAG}.tar.gz"
+          mv release-assets/RoboRoute-linux-arm64.tar.gz \
+            "release-assets/RoboRoute-linux-arm64-${RELEASE_TAG}.tar.gz"
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: RoboRoute ${{ inputs.tag }}
+          draft: true
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          body: |
+
+            If the bundled executable is not marked as executable on Linux, run `chmod +x NTOverAOA-*` before launching it.
+          files: release-assets/*

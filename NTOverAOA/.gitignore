@@ -1,0 +1,9 @@
+*.history
+*env
+*__pycache__
+networktables.json
+repomix-output.xml
+dist/
+build/
+*.manifest
+*.spec

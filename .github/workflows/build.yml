@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    uses: ./.github/workflows/build-apk.yml
+    secrets: inherit
+
+  ntoveraoa-linux:
+    uses: ./.github/workflows/build-NTOverAOA-linux.yml
+
+  ntoveraoa-windows:
+    uses: ./.github/workflows/build-NTOverAOA-windows.yml
+
+  package:
+    needs:
+      - apk
+      - ntoveraoa-linux
+      - ntoveraoa-windows
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v7
+        with:
+          name: android-debug-apk
+          path: bundles/apk
+
+      - name: Download Linux x86_64 executable
+        uses: actions/download-artifact@v7
+        with:
+          name: NTOverAOA-linux-x86_64
+          path: bundles/linux-x86_64
+
+      - name: Download Linux ARM64 executable
+        uses: actions/download-artifact@v7
+        with:
+          name: NTOverAOA-linux-arm64
+          path: bundles/linux-arm64
+
+      - name: Download Windows executable
+        uses: actions/download-artifact@v7
+        with:
+          name: NTOverAOA-windows-x86_64
+          path: bundles/windows
+
+      - name: Package per-platform bundles
+        run: |
+          set -euo pipefail
+
+          apk="$(
+            find bundles/apk -name '*.apk' -type f -print -quit
+          )"
+          if [ -z "${apk}" ]; then
+            echo "No APK found in the android-debug-apk artifact" >&2
+            exit 1
+          fi
+
+          mkdir -p packages
+
+          cp "$apk" bundles/windows/RoboRoute.apk
+          (
+            cd bundles/windows
+            zip -r "../../packages/RoboRoute-windows-x86_64.zip" \
+              NTOverAOA.exe RoboRoute.apk
+          )
+
+          cp "$apk" bundles/linux-x86_64/RoboRoute.apk
+          (
+            cd bundles/linux-x86_64
+            tar -czf "../../packages/RoboRoute-linux-x86_64.tar.gz" \
+              NTOverAOA-linux-x86_64.run RoboRoute.apk
+          )
+
+          cp "$apk" bundles/linux-arm64/RoboRoute.apk
+          (
+            cd bundles/linux-arm64
+            tar -czf "../../packages/RoboRoute-linux-arm64.tar.gz" \
+              NTOverAOA-linux-arm64.run RoboRoute.apk
+          )
+
+          ls -la packages
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v6
+        with:
+          name: RoboRoute-bundles
+          path: packages/*
+          if-no-files-found: error
