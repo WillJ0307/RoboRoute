@@ -1,0 +1,132 @@
+name: Build Windows executable
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build libwdi
+        shell: pwsh
+        run: |
+          $wdkInstaller = Join-Path $env:RUNNER_TEMP "wdfcoinstaller.msi"
+          $wdkExtract = Join-Path $env:RUNNER_TEMP "wdk"
+          Invoke-WebRequest `
+            -Uri "https://go.microsoft.com/fwlink/p/?LinkID=253170" `
+            -OutFile $wdkInstaller
+
+          $extract = Start-Process msiexec.exe `
+            -ArgumentList @('/a', $wdkInstaller, '/qn', "TARGETDIR=$wdkExtract") `
+            -Wait `
+            -PassThru
+
+          if ($extract.ExitCode -ne 0) {
+            throw "WDK redistributable extraction failed with exit code $($extract.ExitCode)"
+          }
+
+          $wdf = Get-ChildItem `
+            -Path $wdkExtract `
+            -Filter WdfCoInstaller01011.dll `
+            -File `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+          if (-not $wdf) {
+            throw "WdfCoInstaller01011.dll was not found in the installed Windows Kits"
+          }
+
+          $wdkRoot = Split-Path (Split-Path (Split-Path (Split-Path $wdf.FullName -Parent) -Parent) -Parent) -Parent
+          $buildMacros = 'WDK_DIR="' + $wdkRoot.Replace('\', '/') + '"'
+          $libwdiRoot = (Resolve-Path "third_party/libwdi").Path
+          $solutionDir = "$libwdiRoot\"
+
+          $configPath = Join-Path $libwdiRoot "msvc\config.h"
+          $config = Get-Content $configPath -Raw
+          $config = $config -replace '(?ms)^#ifndef LIBUSB0_DIR.*?^#endif\s*', ''
+          $config = $config -replace '(?ms)^#ifndef LIBUSBK_DIR.*?^#endif\s*', ''
+          Set-Content $configPath $config -NoNewline
+
+          msbuild third_party/libwdi/libwdi/.msvc/embedder.vcxproj /m `
+            /p:Configuration=Release /p:Platform=Win32 `
+            /p:SolutionDir="$solutionDir" /p:BuildMacros="$buildMacros"
+          msbuild third_party/libwdi/libwdi/.msvc/installer_x86.vcxproj /m `
+            /p:Configuration=Release /p:Platform=Win32 `
+            /p:SolutionDir="$solutionDir" /p:BuildMacros="$buildMacros"
+          msbuild third_party/libwdi/libwdi/.msvc/installer_x64.vcxproj /m `
+            /p:Configuration=Release /p:Platform=x64 `
+            /p:SolutionDir="$solutionDir" /p:BuildMacros="$buildMacros"
+          msbuild third_party/libwdi/libwdi/.msvc/installer_arm64.vcxproj /m `
+            /p:Configuration=Release /p:Platform=ARM64 `
+            /p:SolutionDir="$solutionDir" /p:BuildMacros="$buildMacros"
+
+          Push-Location "$libwdiRoot\libwdi"
+          & .\embedder.exe embedded.h
+          if ($LASTEXITCODE -ne 0) {
+            throw "libwdi embedder failed with exit code $LASTEXITCODE"
+          }
+          Pop-Location
+
+          $dllProjectPath = Join-Path $libwdiRoot "libwdi\.msvc\libwdi_dll.vcxproj"
+          $dllProject = Get-Content $dllProjectPath -Raw
+          $dllProject = $dllProject -replace '(?s)\s*<ItemGroup>\s*<ProjectReference\b.*?</ItemGroup>', ''
+          Set-Content $dllProjectPath $dllProject -NoNewline
+
+          msbuild third_party/libwdi/libwdi/.msvc/libwdi_dll.vcxproj /m `
+            /p:Configuration=Release /p:Platform=x64 `
+            /p:SolutionDir="$solutionDir" /p:BuildMacros="$buildMacros" `
+            /p:BuildProjectReferences=false /p:PreBuildEventUseInBuild=false
+
+      - name: Build one-file executable
+        shell: pwsh
+        run: |
+          $libusbDll = python -c "import pathlib,libusb; print(pathlib.Path(libusb.__file__).parent / '_platform' / 'windows' / 'x86_64' / 'libusb-1.0.dll')"
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name NTOverAOA `
+            --collect-all ntcore `
+            --collect-all native `
+            --collect-all libusb `
+            --hidden-import pkg_about `
+            --hidden-import usb.backend.libusb1 `
+            --copy-metadata libusb `
+            --copy-metadata pkg-about `
+            --copy-metadata py-utlx `
+            --add-binary "${libusbDll};libusb/_platform/windows/x86_64" `
+            --add-binary "third_party/libwdi/x64/Release/dll/libwdi.dll;libwdi" `
+            run.py
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTOverAOA-windows-x86_64
+          path: dist/NTOverAOA.exe
+          if-no-files-found: error

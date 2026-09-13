@@ -1,0 +1,3 @@
+[submodule "NTOverAOA/third_party/libwdi"]
+	path = NTOverAOA/third_party/libwdi
+	url = https://github.com/pbatard/libwdi.git

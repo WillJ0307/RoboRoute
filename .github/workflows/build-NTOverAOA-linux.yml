@@ -1,0 +1,126 @@
+name: Build Linux executable
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Linux runtime and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libusb-1.0-0 \
+            libusb-1.0-0-dev \
+            python3-tk \
+            xvfb
+      
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build one-file executable
+        run: |
+          export LD_LIBRARY_PATH="$(python -c 'import sys; print(sys.prefix + "/lib")'):${LD_LIBRARY_PATH:-}"
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --onefile \
+            --name NTOverAOA-linux-x86_64.run \
+            --collect-all ntcore \
+            --collect-all native \
+            --hidden-import usb.backend.libusb1 \
+            --exclude-module classes.winusb_installer \
+            run.py
+
+      - name: Smoke test executable startup
+        run: |
+          set +e
+          xvfb-run --auto-servernum timeout --signal=TERM 15s ./dist/NTOverAOA-linux-x86_64.run
+          status=$?
+          set -e
+          if [[ "$status" -ne 124 ]]; then
+            exit "$status"
+          fi
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTOverAOA-linux-x86_64
+          path: dist/NTOverAOA-linux-x86_64.run
+          if-no-files-found: error
+
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Linux runtime and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libusb-1.0-0 \
+            libusb-1.0-0-dev \
+            python3-tk \
+            xvfb
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build one-file executable
+        run: |
+          export LD_LIBRARY_PATH="$(python -c 'import sys; print(sys.prefix + "/lib")'):${LD_LIBRARY_PATH:-}"
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --onefile \
+            --name NTOverAOA-linux-arm64.run \
+            --collect-all ntcore \
+            --collect-all native \
+            --hidden-import usb.backend.libusb1 \
+            --exclude-module classes.winusb_installer \
+            run.py
+
+      - name: Smoke test executable startup
+        run: |
+          set +e
+          xvfb-run --auto-servernum timeout --signal=TERM 15s ./dist/NTOverAOA-linux-arm64.run
+          status=$?
+          set -e
+          if [[ "$status" -ne 124 ]]; then
+            exit "$status"
+          fi
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTOverAOA-linux-arm64
+          path: dist/NTOverAOA-linux-arm64.run
+          if-no-files-found: error
