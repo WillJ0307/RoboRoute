@@ -1,5 +1,5 @@
-name: Lint/Format
-on: 
+name: Lint/Format Check (NTOverAOA)
+on:
   push:
     branches:
       - main
