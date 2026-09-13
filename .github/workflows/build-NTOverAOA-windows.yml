@@ -13,12 +13,12 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive   
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -30,7 +30,7 @@ jobs:
           python -m pip install -r requirements.txt pyinstaller
 
       - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Build libwdi
         shell: pwsh
@@ -128,7 +128,7 @@ jobs:
             run.py
 
       - name: Upload executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: NTOverAOA-windows-x86_64
           path: NTOverAOA/dist/NTOverAOA.exe
