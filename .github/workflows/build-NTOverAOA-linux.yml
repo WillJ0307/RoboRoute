@@ -50,6 +50,7 @@ jobs:
             --collect-all native \
             --hidden-import usb.backend.libusb1 \
             --exclude-module classes.winusb_installer \
+            --add-data "../assets/logo.png:assets" \
             run.py
 
       - name: Smoke test executable startup
@@ -111,6 +112,7 @@ jobs:
             --collect-all native \
             --hidden-import usb.backend.libusb1 \
             --exclude-module classes.winusb_installer \
+            --add-data "../assets/logo.png:assets" \
             run.py
 
       - name: Smoke test executable startup

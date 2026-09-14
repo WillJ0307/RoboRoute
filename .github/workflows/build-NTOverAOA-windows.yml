@@ -125,6 +125,7 @@ jobs:
             --copy-metadata py-utlx `
             --add-binary "${libusbDll};libusb/_platform/windows/x86_64" `
             --add-binary "third_party/libwdi/x64/Release/dll/libwdi.dll;libwdi" `
+            --add-data "../assets/logo.png;assets" `
             run.py
 
       - name: Upload executable

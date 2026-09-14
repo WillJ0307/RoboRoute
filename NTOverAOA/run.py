@@ -21,6 +21,14 @@ if sys.platform == "win32":
     )
 
 
+def _resource_path(*parts):
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+    else:
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    return os.path.join(base, *parts)
+
+
 class ConnectionState(Enum):
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
@@ -34,6 +42,9 @@ class TKApp:
         self.root.geometry("560x480")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        app_icon = tk.PhotoImage(file=_resource_path("assets", "logo.png"))
+        root.iconphoto(True, app_icon)
 
         self.style = ttk.Style()
         self.style.theme_use("clam")
