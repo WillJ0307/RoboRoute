@@ -7,7 +7,12 @@ import java.io.InputStream
 import java.io.OutputStream
 
 object AppDataSerializer : Serializer<AppData> {
-    override val defaultValue: AppData = AppData.getDefaultInstance()
+    override val defaultValue: AppData =
+        AppData
+            .newBuilder()
+            .setRobotWidth(1.0)
+            .setRobotLength(1.0)
+            .build()
 
     override suspend fun readFrom(input: InputStream): AppData {
         try {
