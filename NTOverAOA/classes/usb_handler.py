@@ -120,8 +120,10 @@ class USBHandler:
 
             os.environ["PATH"] = dll_dir + os.pathsep + os.environ.get("PATH", "")
 
-            if hasattr(os, "add_dll_directory"):
-                self._dll_directory_handle = os.add_dll_directory(dll_dir)
+            add_dll_directory = getattr(os, "add_dll_directory", None)
+
+            if add_dll_directory is not None:
+                self._dll_directory_handle = add_dll_directory(dll_dir)
 
             self._usb_backend = usb.backend.libusb1.get_backend(
                 find_library=lambda _candidate: dll
@@ -303,6 +305,9 @@ class USBHandler:
         return ep_in, ep_out
 
     def send_frame(self, payload):
+        if self._ep_out is None:
+            raise RuntimeError("Not connected")
+
         self._ep_out.write(
             bytes(payload),
             timeout=WRITE_TIMEOUT,
@@ -315,6 +320,9 @@ class USBHandler:
         buf = b"".join(message for message in msgs if message)
 
         if buf:
+            if self._ep_out is None:
+                raise RuntimeError("Not connected")
+
             self._ep_out.write(
                 buf,
                 timeout=WRITE_TIMEOUT,
@@ -370,6 +378,9 @@ class USBHandler:
             return line
 
         try:
+            if self._ep_in is None:
+                raise RuntimeError("Not connected")
+
             chunk = self._ep_in.read(
                 max_read,
                 int(timeout * 1000),

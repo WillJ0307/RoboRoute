@@ -19,13 +19,21 @@ if sys.platform == "win32":
         _handle_elevated_winusb_install,
         _run_elevated_winusb_install,
     )
+else:
+
+    def _run_elevated_winusb_install(vid, pid, description):
+        raise RuntimeError("WinUSB driver installation is only available on Windows")
+
+    def _handle_elevated_winusb_install(request_path, result_path):
+        raise RuntimeError("WinUSB driver installation is only available on Windows")
 
 
 def _resource_path(*parts):
-    if hasattr(sys, "_MEIPASS"):
-        base = sys._MEIPASS
-    else:
+    base = getattr(sys, "_MEIPASS", None)
+
+    if base is None:
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
     return os.path.join(base, *parts)
 
 
@@ -59,6 +67,7 @@ class TKApp:
 
         self._install_thread = None
         self._driver_install_thread = None
+        self.driver_install_btn = None
         self._install_lock = threading.Lock()
 
         self.bridge = NTOverUSBBridge(
@@ -393,6 +402,10 @@ class TKApp:
         if self.connected:
             self._disconnect()
 
+        if self.driver_install_btn is None:
+            self._install_lock.release()
+            return
+
         self.driver_install_btn.config(state=tk.DISABLED, text="Installing...")
         self._driver_install_thread = threading.Thread(
             target=self._install_winusb_worker,
@@ -425,12 +438,13 @@ class TKApp:
             )
 
         finally:
-            self.root.after(
-                0,
-                lambda: self.driver_install_btn.config(
-                    state=tk.NORMAL, text="Install Driver"
-                ),
-            )
+            def reset_driver_button():
+                if self.driver_install_btn is not None:
+                    self.driver_install_btn.config(
+                        state=tk.NORMAL, text="Install Driver"
+                    )
+
+            self.root.after(0, reset_driver_button)
             self._install_lock.release()
 
     def _log(self, msg):

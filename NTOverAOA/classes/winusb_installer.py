@@ -88,10 +88,13 @@ def _load_library():
     dll_dir = os.path.dirname(path)
     dll_handle = None
 
-    if hasattr(os, "add_dll_directory"):
-        dll_handle = os.add_dll_directory(dll_dir)
+    add_dll_directory = getattr(os, "add_dll_directory", None)
 
-    library = ctypes.WinDLL(path)
+    if add_dll_directory is not None:
+        dll_handle = add_dll_directory(dll_dir)
+
+    win_dll = getattr(ctypes, "WinDLL", ctypes.CDLL)
+    library = win_dll(path)
     library.wdi_create_list.argtypes = [
         ctypes.POINTER(ctypes.POINTER(_WdiDeviceInfo)),
         ctypes.POINTER(_WdiCreateListOptions),
