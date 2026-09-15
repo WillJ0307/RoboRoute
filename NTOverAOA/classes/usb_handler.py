@@ -19,6 +19,29 @@ from .aoa import find_accessory, find_device, toggle_accessory_mode
 ACCESSORY_VID = 0x18D1
 ACCESSORY_PIDS = (0x2D00, 0x2D01, 0x2D04, 0x2D05)
 
+# USB device/interface classes that an Android Accessory target would never
+# expose, used to rule out webcams, Bluetooth chips, hubs, and other noise.
+NON_ANDROID_CLASSES = {
+    0x01,  # Audio
+    0x02,  # Communications/CDC
+    0x03,  # HID
+    0x05,  # Physical
+    0x06,  # Image
+    0x07,  # Printer
+    0x08,  # Mass Storage
+    0x09,  # Hub
+    0x0A,  # CDC-Data
+    0x0B,  # Smart Card
+    0x0D,  # Content Security
+    0x0E,  # Video
+    0x0F,  # Personal Healthcare
+    0x10,  # Audio/Video
+    0x11,  # Billboard
+    0x12,  # USB Type-C Bridge
+    0xDC,  # Diagnostic
+    0xE0,  # Wireless Controller
+}
+
 MANUFACTURER = "NTOverAOA"
 MODEL = "Adapter"
 DESCRIPTION = "Sends NetworkTables Data to a Android Device With AOA"
@@ -121,39 +144,30 @@ class USBHandler:
 
         return f"{dev.idVendor:04x}:{dev.idProduct:04x} {name}".strip()
 
-    def has_vendor_interface(self, dev):
+    def _exposes_class(self, dev, classes):
+        if dev.bDeviceClass in classes:
+            return True
+
         try:
-            configs = dev.configs()
+            for config in dev.configurations():
+                for interface in config.interfaces():
+                    if interface.bInterfaceClass in classes:
+                        return True
         except Exception:  # noqa: BLE001 - device inspection can fail per backend
             return False
 
-        for config in configs:
-            for interface in config.interfaces():
-                if interface.bInterfaceClass == 0xFF:
-                    return True
-
         return False
 
-    def is_known_device(self, dev, name):
+    def is_android_device(self, dev):
         if dev.idVendor == ACCESSORY_VID and dev.idProduct in ACCESSORY_PIDS:
+            # AOA IDs bypass the class filter on purpose: 2D04/2D05 legitimately
+            # add an Audio interface while still being valid targets.
             return True
 
-        low = name.lower()
+        if not self._exposes_class(dev, {0xFF}):
+            return False
 
-        names = (
-            "android",
-            "essential",
-            "ph-1",
-            "lenovo",
-            "mata",
-            "qualcomm",
-            "google",
-        )
-
-        if any(word in low for word in names):
-            return True
-
-        return self.has_vendor_interface(dev)
+        return not self._exposes_class(dev, NON_ANDROID_CLASSES)
 
     def find_options(self):
         self.init_backend()
@@ -180,7 +194,7 @@ class USBHandler:
                     self._serial_number(dev),
                 )
 
-                if self.is_known_device(dev, name):
+                if self.is_android_device(dev):
                     known.append(entry)
                 else:
                     others.append(entry)
