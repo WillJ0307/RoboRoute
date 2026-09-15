@@ -4,4 +4,4 @@ libusb>=1.0.26
 adb-shell[usb]
 crossfiledialog
 websocket-client
-ruff
+ruff==0.16.6
