@@ -1,26 +1,16 @@
 from collections.abc import Callable, Iterator
 from typing import Any, Literal, overload
 
-class USBError(Exception):
-    ...
-
-
-class USBTimeoutError(USBError):
-    ...
-
-
-class NoBackendError(USBError):
-    ...
-
+class USBError(Exception): ...
+class USBTimeoutError(USBError): ...
+class NoBackendError(USBError): ...
 
 class Endpoint:
     bEndpointAddress: int
     bmAttributes: int
 
     def read(self, size: int = 4096, timeout: int | None = None) -> bytes: ...
-
     def write(self, data: Any, timeout: int | None = None) -> int: ...
-
 
 class Interface:
     bInterfaceClass: int
@@ -28,12 +18,10 @@ class Interface:
 
     def endpoints(self) -> tuple[Endpoint, ...]: ...
 
-
 class Configuration:
     bConfigurationValue: int
 
     def interfaces(self) -> tuple[Interface, ...]: ...
-
 
 class Device:
     idVendor: int
@@ -44,9 +32,7 @@ class Device:
     serial_number: str | None
 
     def configurations(self) -> tuple[Configuration, ...]: ...
-
     def get_active_configuration(self) -> Configuration: ...
-
     def ctrl_transfer(
         self,
         bmRequestType: int,
@@ -57,7 +43,6 @@ class Device:
         timeout: int | None = None,
     ) -> Any: ...
 
-
 @overload
 def find(
     find_all: Literal[False] = False,
@@ -65,8 +50,6 @@ def find(
     custom_match: Callable[[Device], bool] | None = None,
     **kwargs: Any,
 ) -> Device | None: ...
-
-
 @overload
 def find(
     find_all: Literal[True],
@@ -74,8 +57,6 @@ def find(
     custom_match: Callable[[Device], bool] | None = None,
     **kwargs: Any,
 ) -> Iterator[Device]: ...
-
-
 def find(
     find_all: bool = False,
     backend: Any = None,

@@ -20,11 +20,6 @@ CTRL_RECIPIENT_OTHER: int
 CTRL_IN: int
 CTRL_OUT: int
 
-
 def endpoint_direction(endpoint_address: int) -> int: ...
-
-
 def endpoint_type(endpoint_attributes: int) -> int: ...
-
-
 def dispose_resources(device_or_handle: Any) -> None: ...
