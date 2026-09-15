@@ -15,15 +15,18 @@ import com.team2207.roboroute.datastore.ActionRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 
 object AoaSubscribeTrigger {
     val events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -49,9 +52,24 @@ class AoaPoseReceiver(
     private var currentNtPath: String = ""
     private val seenKeys = mutableSetOf<String>()
 
+    // Pending pose stages are coalesced and published at a fixed rate so a burst of
+    // telemetry messages cannot flood the UI with recompositions.
+    private val poseLock = Any()
+    private var pendingFullPose = false
+    private var pendingAxisMask = 0
+    private var pendingX = 0.0
+    private var pendingY = 0.0
+    private var pendingRotation = 0.0
+
     companion object {
         private const val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
         private const val ALLIANCE_PATH = "FMSInfo/isRedAlliance"
+        private const val POSE_PUBLISH_INTERVAL_MS = 33L
+        private const val NEWLINE_BYTE = '\n'.code.toByte()
+        private const val MAX_LINE_BYTES = 1 shl 22
+        private const val AXIS_X = 1
+        private const val AXIS_Y = 2
+        private const val AXIS_ROTATION = 4
     }
 
     private val usbReceiver =
@@ -90,6 +108,14 @@ class AoaPoseReceiver(
         }
         findAndConnect()
 
+        // Publish staged pose updates at a fixed rate regardless of incoming message rate.
+        scope.launch {
+            while (true) {
+                publishPendingPose()
+                delay(POSE_PUBLISH_INTERVAL_MS)
+            }
+        }
+
         // Observe path changes and re-subscribe
         scope.launch {
             repository.appDataFlow
@@ -118,7 +144,7 @@ class AoaPoseReceiver(
         // Periodic Alliance check (every minute)
         scope.launch {
             while (true) {
-                kotlinx.coroutines.delay(60000)
+                delay(60000)
                 if (outputStream != null) {
                     SerialLogManager.addLog("AOA: Periodic Alliance check...")
                     subscribe(ALLIANCE_PATH)
@@ -214,7 +240,7 @@ class AoaPoseReceiver(
 
             // Initial subscriptions
             scope.launch {
-                kotlinx.coroutines.delay(1000)
+                delay(1000)
                 if (currentNtPath.isNotEmpty()) subscribe(currentNtPath)
                 subscribe(ALLIANCE_PATH)
             }
@@ -239,30 +265,39 @@ class AoaPoseReceiver(
 
     private fun startReading() {
         scope.launch {
-            val buffer = ByteArray(16384)
-            var stringBuffer = ""
+            val chunk = ByteArray(16384)
+            val pending = ByteArrayOutputStream(4096)
             try {
                 while (true) {
-                    val bytesRead = inputStream?.read(buffer) ?: -1
+                    val bytesRead = inputStream?.read(chunk) ?: -1
                     if (bytesRead > 0) {
-                        val data = String(buffer, 0, bytesRead)
-                        stringBuffer += data
+                        var lineStart = 0
+                        for (i in 0 until bytesRead) {
+                            if (chunk[i] == NEWLINE_BYTE) {
+                                pending.write(chunk, lineStart, i - lineStart)
+                                val line = String(pending.toByteArray(), StandardCharsets.UTF_8).trim()
+                                pending.reset()
+                                lineStart = i + 1
+                                if (line.isNotEmpty()) {
+                                    processLine(line)
+                                }
+                            }
+                        }
+                        if (lineStart < bytesRead) {
+                            pending.write(chunk, lineStart, bytesRead - lineStart)
+                        }
+
+                        // Guard against an unbounded partial frame (e.g. a giant listing or a
+                        // malformed stream). Dropping it is safe; a pending list is not useful.
+                        if (pending.size() > MAX_LINE_BYTES) {
+                            pending.reset()
+                        }
 
                         // Log "Data received" at most once per second to avoid flooding
                         val now = System.currentTimeMillis()
                         if (now - lastDataLogTime > 1000) {
                             SerialLogManager.addLog("AOA: Telemetry data being received...")
                             lastDataLogTime = now
-                        }
-
-                        while (stringBuffer.contains("\n")) {
-                            val index = stringBuffer.indexOf("\n")
-                            val line = stringBuffer.substring(0, index).trim()
-                            stringBuffer = stringBuffer.substring(index + 1)
-
-                            if (line.isNotEmpty()) {
-                                parseLine(line)
-                            }
                         }
                     } else if (bytesRead == -1) {
                         SerialLogManager.addLog("AOA: End of stream reached")
@@ -275,75 +310,136 @@ class AoaPoseReceiver(
         }
     }
 
-    private fun parseLine(line: String) {
+    private fun processLine(line: String) {
+        // Fast path: only handle value messages. This skips the (possibly huge) topic listing
+        // and other protocol messages without building a full Gson tree for them.
+        if (!line.startsWith("{") || !line.contains("\"key\"")) {
+            return
+        }
+
         try {
-            if (line.startsWith("{") && line.endsWith("}")) {
-                val json = gson.fromJson(line, JsonObject::class.java)
-                val key = json.get("key")?.asString ?: return
-                val valueElement = json.get("value") ?: return
+            val json = gson.fromJson(line, JsonObject::class.java)
+            val key = json.get("key")?.asString ?: return
+            val valueElement = json.get("value") ?: return
 
-                if (seenKeys.add(key)) {
-                    SerialLogManager.addLog("AOA: Received topic: $key")
+            if (seenKeys.add(key)) {
+                SerialLogManager.addLog("AOA: Received topic: $key")
+            }
+
+            // Handle Alliance Color
+            if (key.endsWith(ALLIANCE_PATH)) {
+                if (valueElement.isJsonPrimitive) {
+                    RobotPoseManager.updateAlliance(valueElement.asBoolean)
                 }
+                return
+            }
 
-                // Handle Alliance Color
-                if (key.endsWith(ALLIANCE_PATH)) {
-                    if (valueElement.isJsonPrimitive) {
-                        RobotPoseManager.updateAlliance(valueElement.asBoolean)
+            if (currentNtPath.isEmpty()) return
+
+            val normalizedPath = if (currentNtPath.startsWith("/")) currentNtPath else "/$currentNtPath"
+
+            // Case 1: Full Pose2d match
+            if (key == normalizedPath) {
+                if (valueElement.isJsonArray) {
+                    val arr = valueElement.asJsonArray
+                    if (arr.size() >= 3) {
+                        stageFullPose(
+                            arr.get(0).asDouble,
+                            arr.get(1).asDouble,
+                            arr.get(2).asDouble,
+                        )
+                        return
                     }
-                    return
-                }
-
-                if (currentNtPath.isEmpty()) return
-
-                val normalizedPath = if (currentNtPath.startsWith("/")) currentNtPath else "/$currentNtPath"
-
-                // Case 1: Full Pose2d match
-                if (key == normalizedPath) {
-                    if (valueElement.isJsonArray) {
-                        val arr = valueElement.asJsonArray
-                        if (arr.size() >= 3) {
-                            RobotPoseManager.updateFullPose(arr.get(0).asDouble, arr.get(1).asDouble, arr.get(2).asDouble)
-                            return
-                        }
-                    } else if (valueElement.isJsonObject) {
-                        val obj = valueElement.asJsonObject
-                        val x =
-                            obj.get("x")?.asDouble ?: obj
-                                .get("translation")
-                                ?.asJsonObject
-                                ?.get("x")
-                                ?.asDouble
-                        val y =
-                            obj.get("y")?.asDouble ?: obj
-                                .get("translation")
-                                ?.asJsonObject
-                                ?.get("y")
-                                ?.asDouble
-                        val rotElement = obj.get("rotation") ?: obj.get("rot") ?: obj.get("r")
-                        val rotation = rotElement?.let { if (it.isJsonObject) it.asJsonObject.get("value")?.asDouble else it.asDouble }
-                        if (x != null && y != null && rotation != null) {
-                            RobotPoseManager.updateFullPose(x, y, rotation)
-                            return
-                        }
+                } else if (valueElement.isJsonObject) {
+                    val obj = valueElement.asJsonObject
+                    val x =
+                        obj.get("x")?.asDouble ?: obj
+                            .get("translation")
+                            ?.asJsonObject
+                            ?.get("x")
+                            ?.asDouble
+                    val y =
+                        obj.get("y")?.asDouble ?: obj
+                            .get("translation")
+                            ?.asJsonObject
+                            ?.get("y")
+                            ?.asDouble
+                    val rotElement = obj.get("rotation") ?: obj.get("rot") ?: obj.get("r")
+                    val rotation = rotElement?.let { if (it.isJsonObject) it.asJsonObject.get("value")?.asDouble else it.asDouble }
+                    if (x != null && y != null && rotation != null) {
+                        stageFullPose(x, y, rotation)
+                        return
                     }
                 }
+            }
 
-                // Case 2: Individual components
-                if (key.startsWith(normalizedPath)) {
-                    val subKey = key.substringAfter(normalizedPath).removePrefix("/")
-                    if (valueElement.isJsonPrimitive) {
-                        val value = valueElement.asDouble
-                        when (subKey.uppercase()) {
-                            "X" -> RobotPoseManager.updateX(value)
-                            "Y" -> RobotPoseManager.updateY(value)
-                            "ROTATION", "R", "ROT" -> RobotPoseManager.updateRotation(value)
-                        }
+            // Case 2: Individual components
+            if (key.startsWith(normalizedPath)) {
+                val subKey = key.substringAfter(normalizedPath).removePrefix("/")
+                if (valueElement.isJsonPrimitive) {
+                    val value = valueElement.asDouble
+                    when (subKey.uppercase()) {
+                        "X" -> stageAxis(AXIS_X, value)
+                        "Y" -> stageAxis(AXIS_Y, value)
+                        "ROTATION", "R", "ROT" -> stageAxis(AXIS_ROTATION, value)
                     }
                 }
             }
         } catch (e: Exception) {
             SerialLogManager.addLog("AOA: Parse Error: ${e.message}")
+        }
+    }
+
+    private fun stageFullPose(
+        x: Double,
+        y: Double,
+        rotation: Double,
+    ) {
+        synchronized(poseLock) {
+            pendingX = x
+            pendingY = y
+            pendingRotation = rotation
+            pendingFullPose = true
+        }
+    }
+
+    private fun stageAxis(
+        axis: Int,
+        value: Double,
+    ) {
+        synchronized(poseLock) {
+            when (axis) {
+                AXIS_X -> pendingX = value
+                AXIS_Y -> pendingY = value
+                AXIS_ROTATION -> pendingRotation = value
+            }
+            pendingAxisMask = pendingAxisMask or axis
+        }
+    }
+
+    private fun publishPendingPose() {
+        var hasFullPose = false
+        var axisMask = 0
+        var x = 0.0
+        var y = 0.0
+        var rotation = 0.0
+
+        synchronized(poseLock) {
+            hasFullPose = pendingFullPose
+            axisMask = pendingAxisMask
+            x = pendingX
+            y = pendingY
+            rotation = pendingRotation
+            pendingFullPose = false
+            pendingAxisMask = 0
+        }
+
+        if (hasFullPose) {
+            RobotPoseManager.updateFullPose(x, y, rotation)
+        } else if (axisMask != 0) {
+            if (axisMask and AXIS_X != 0) RobotPoseManager.updateX(x)
+            if (axisMask and AXIS_Y != 0) RobotPoseManager.updateY(y)
+            if (axisMask and AXIS_ROTATION != 0) RobotPoseManager.updateRotation(rotation)
         }
     }
 }
