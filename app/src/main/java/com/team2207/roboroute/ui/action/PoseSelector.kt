@@ -96,18 +96,10 @@ fun PoseSelectorMainView(
             val fitHeightDp = (imgHeight * scale).dp
 
             val density = androidx.compose.ui.platform.LocalDensity.current
-            val fitWidthPx = with(density) { fitWidthDp.toPx() }
-            val fitHeightPx = with(density) { fitHeightDp.toPx() }
-
-            // FRC convention: X is long axis (~16.5m), Y is short axis (~8.2m).
-            // Image convention: Width is long side, Height is short side.
-            // Mapping: Bottom-Right is (0,0). Left is +Y (Long), Up is +X (Short).
-            // Wait, if "Up is +X (Short)", then the user's "X" is the 8.2m axis.
-            // And "Left is +Y (Long)", then the user's "Y" is the 16.5m axis.
-            // Let's stick to this consistently.
+            val fitWidthPx = imgWidth * scale * density.density
+            val fitHeightPx = imgHeight * scale * density.density
 
             // Pixels per meter should be consistent to avoid stretching.
-            // We'll use the height as the master scale.
             val pxPerMeter = fitHeightPx / FIELD_HEIGHT_METERS
 
             if (!isInitialized) {
@@ -163,7 +155,6 @@ fun PoseSelectorMainView(
                         .size(fitWidthDp, fitHeightDp)
                         .align(Alignment.Center),
             ) {
-                // Use consistent pxPerMeter to keep the robot square
                 val robotWidthDp = (robotWidthMeter * pxPerMeter / density.density).dp
                 val robotLengthDp = (robotLengthMeter * pxPerMeter / density.density).dp
 
@@ -220,7 +211,6 @@ fun RobotVisual(
     val strokeWidth = 2.dp
     val primaryColor = returnPrimaryColor()
 
-    // Total height of drawing including control extension if shown
     val drawingHeight = if (showControls) (dotSize / 2) + extensionLength + robotLength else robotLength
 
     Canvas(modifier = modifier.size(width = robotWidth, height = drawingHeight)) {
@@ -234,7 +224,6 @@ fun RobotVisual(
         val squareTopY = if (showControls) dotRadiusPx + extensionPx else 0f
         val centerY = squareTopY + (robotLengthPx / 2f)
 
-        // Draw robot body
         drawRoundRect(
             color = primaryColor,
             topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
@@ -243,14 +232,11 @@ fun RobotVisual(
             style = Stroke(width = strokeWidthPx),
         )
 
-        // Draw Front Arrow - Tips at the front edge
         val arrowPath =
             Path().apply {
                 val arrowWidth = robotWidthPx * 0.5f
                 val arrowHeight = robotLengthPx * 0.3f
-
-                // Front edge is squareTopY
-                moveTo(centerX, squareTopY) // Tip at very front
+                moveTo(centerX, squareTopY)
                 lineTo(centerX - arrowWidth / 2f, squareTopY + arrowHeight)
                 lineTo(centerX + arrowWidth / 2f, squareTopY + arrowHeight)
                 close()
@@ -258,7 +244,6 @@ fun RobotVisual(
         drawPath(path = arrowPath, color = primaryColor.copy(alpha = 0.7f))
 
         if (showControls) {
-            // Line from center to rotation dot
             drawLine(
                 color = primaryColor,
                 start = Offset(centerX, centerY),
@@ -272,7 +257,7 @@ fun RobotVisual(
 
 @Composable
 fun RobotPoseEdit(
-    rotation: Float, // RADIANS
+    rotation: Float,
     modifier: Modifier = Modifier,
     onMove: (Offset) -> Unit,
     onRotate: (Float) -> Unit,
@@ -283,13 +268,17 @@ fun RobotPoseEdit(
     val dotSize = 16.dp
     val primaryColor = returnPrimaryColor()
 
-    // The robot center is the pivot.
-    // We need a box large enough to hold the body and the handle at any angle.
     val radiusDp = extensionLength + (robotLength / 2)
     val handleBoxSize = radiusDp * 2 + dotSize * 2
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val radiusPx = with(density) { radiusDp.toPx() }
+    val dotSizePx = with(density) { dotSize.toPx() }
+    val handleBoxSizePx = with(density) { handleBoxSize.toPx() }
+
     var localRotation by remember { mutableStateOf(rotation) }
     var isRotating by remember { mutableStateOf(false) }
+    var isMoving by remember { mutableStateOf(false) }
 
     LaunchedEffect(rotation) {
         if (!isRotating) {
@@ -301,29 +290,53 @@ fun RobotPoseEdit(
         modifier =
             modifier
                 .size(handleBoxSize)
-                .offset(x = -handleBoxSize / 2, y = -handleBoxSize / 2),
-        contentAlignment = Alignment.Center
-    ) {
-        val density = androidx.compose.ui.platform.LocalDensity.current
-        val radiusPx = with(density) { radiusDp.toPx() }
-        val dotSizePx = with(density) { dotSize.toPx() }
+                .offset(x = -handleBoxSize / 2, y = -handleBoxSize / 2)
+                .pointerInput(Unit) {
+                    val centerX = handleBoxSizePx / 2f
+                    val centerY = centerX
 
-        // Rotated Body & Line
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val dist = (offset - Offset(centerX, centerY)).getDistance()
+                            if (Math.abs(dist - radiusPx) < dotSizePx * 2f) {
+                                isRotating = true
+                            } else if (dist < (robotWidth.toPx() + robotLength.toPx()) / 3f) {
+                                isMoving = true
+                            }
+                        },
+                        onDragEnd = {
+                            isRotating = false
+                            isMoving = false
+                        },
+                        onDragCancel = {
+                            isRotating = false
+                            isMoving = false
+                        },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        if (isMoving) {
+                            onMove(dragAmount)
+                        } else if (isRotating) {
+                            val touchX = change.position.x - centerX
+                            val touchY = change.position.y - centerY
+                            val angle = atan2(touchY.toDouble(), touchX.toDouble()).toFloat()
+                            localRotation = angle + (Math.PI.toFloat() / 2f)
+                            onRotate(localRotation)
+                        }
+                    }
+                },
+        contentAlignment = Alignment.Center,
+    ) {
         Box(
             modifier =
                 Modifier
                     .size(width = robotWidth, height = robotLength + extensionLength + dotSize / 2)
                     .graphicsLayer {
                         rotationZ = Math.toDegrees(localRotation.toDouble()).toFloat()
-                        // Pivot is at the center of the robot body.
-                        // Robot body starts at dotSize/2 + extensionLength.
-                        // So center is at dotSize/2 + extensionLength + robotLength/2.
                         val pivotY = (dotSize.toPx() / 2f + extensionLength.toPx() + robotLength.toPx() / 2f)
                         transformOrigin = TransformOrigin(0.5f, pivotY / size.height)
-                    }
-                    .align(Alignment.Center)
-                    // Adjust position so the body center aligns with the handleBox center
-                    .offset(y = -(extensionLength / 2 + dotSize / 4))
+                    }.align(Alignment.Center)
+                    .offset(y = -(extensionLength / 2 + dotSize / 4)),
         ) {
             RobotVisual(
                 modifier = Modifier.fillMaxSize(),
@@ -333,29 +346,14 @@ fun RobotPoseEdit(
             )
         }
 
-        // MOVE dot (at center)
         Box(
             modifier =
                 Modifier
-                    .size(dotSize * 2)
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            onMove(dragAmount)
-                        }
-                    },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(dotSize)
-                        .clip(CircleShape)
-                        .background(primaryColor),
-            )
-        }
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(primaryColor),
+        )
 
-        // ROTATE dot (Calculated position)
         val angleRadForHandle = localRotation.toDouble() - (Math.PI / 2.0)
         val dotOffsetX = (radiusDp.value * cos(angleRadForHandle)).dp
         val dotOffsetY = (radiusDp.value * sin(angleRadForHandle)).dp
@@ -364,38 +362,9 @@ fun RobotPoseEdit(
             modifier =
                 Modifier
                     .offset(x = dotOffsetX, y = dotOffsetY)
-                    .size(dotSize * 2)
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { isRotating = true },
-                            onDragEnd = { isRotating = false },
-                            onDragCancel = { isRotating = false },
-                        ) { change, _ ->
-                            change.consume()
-
-                            // Get the handle's current position relative to parent center
-                            val currentDotX = radiusPx * cos(localRotation - Math.PI / 2.0)
-                            val currentDotY = radiusPx * sin(localRotation - Math.PI / 2.0)
-
-                            // The touch 'change.position' is relative to the dot box top-left.
-                            // The dot box top-left relative to parent center is (currentDotX - dotSizePx, currentDotY - dotSizePx)
-                            val touchX = currentDotX - dotSizePx + change.position.x
-                            val touchY = currentDotY - dotSizePx + change.position.y
-
-                            val angle = atan2(touchY, touchX).toFloat()
-                            localRotation = angle + (Math.PI.toFloat() / 2f)
-                            onRotate(localRotation)
-                        }
-                    },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(dotSize)
-                        .clip(CircleShape)
-                        .background(primaryColor),
-            )
-        }
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(primaryColor),
+        )
     }
 }
