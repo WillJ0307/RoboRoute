@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths-ignore:
-      - '/docs'
-      - '/NTOverAOA'
-      - '/.github'
+      - '/docs/**'
+      - '/NTOverAOA/**'
+      - '/.github/**'
   pull_request:
     paths-ignore:
-      - '/docs'
-      - '/NTOverAOA'
-      - '/.github'
+      - '/docs/**'
+      - '/NTOverAOA/**'
+      - '/.github/**'
 
 jobs:
   ktlint:
