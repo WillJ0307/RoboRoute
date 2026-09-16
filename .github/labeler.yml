@@ -1,0 +1,11 @@
+Android:
+  - changed-files:
+      - any-glob-to-any-file: 'app/**'
+
+NTOverAOA:
+  - changed-files:
+      - any-glob-to-any-file: 'NTOverAOA/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: 'docs/**'

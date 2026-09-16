@@ -3,7 +3,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '/NTOverAOA'
   pull_request:
+    paths:
+      - '/NTOverAOA'
 
 jobs:
   build:
