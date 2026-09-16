@@ -92,10 +92,16 @@ fun PoseSelectorMainView(
             val fitWidthDp = (imgWidth * scale).dp
             val fitHeightDp = (imgHeight * scale).dp
 
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val fitWidthPx = with(density) { fitWidthDp.toPx() }
+            val fitHeightPx = with(density) { fitHeightDp.toPx() }
+
             if (!isInitialized) {
-                // Mapping: Bottom-Right is (0,0). Left is +Y, Up is +X.
-                val xPx = -(initialX / FIELD_WIDTH_METERS * fitHeightDp.value)
-                val yPx = -(initialY / FIELD_HEIGHT_METERS * fitWidthDp.value)
+                // Mapping: Bottom-Right is (0,0). Left is +Y (Long), Up is +X (Short).
+                // So Meter initialX (Short) -> Pixel Y
+                // Meter initialY (Long) -> Pixel X
+                val xPx = -(initialX / FIELD_HEIGHT_METERS * fitHeightPx)
+                val yPx = -(initialY / FIELD_WIDTH_METERS * fitWidthPx)
                 robotOffset = Offset(yPx.toFloat(), xPx.toFloat())
                 isInitialized = true
             }
@@ -119,9 +125,9 @@ fun PoseSelectorMainView(
 
             IconButton(
                 onClick = {
-                    val frcX = (-robotOffset.y.dp.value / fitHeightDp.value) * FIELD_WIDTH_METERS
-                    val frcY = (-robotOffset.x.dp.value / fitWidthDp.value) * FIELD_HEIGHT_METERS
-                    onConfirm(frcX, frcY, robotRotation.toDouble())
+                    val confirmX = (-robotOffset.y / fitHeightPx) * FIELD_HEIGHT_METERS
+                    val confirmY = (-robotOffset.x / fitWidthPx) * FIELD_WIDTH_METERS
+                    onConfirm(confirmX, confirmY, robotRotation.toDouble())
                     onBack()
                 },
                 modifier =
@@ -144,8 +150,8 @@ fun PoseSelectorMainView(
                         .size(fitWidthDp, fitHeightDp)
                         .align(Alignment.Center),
             ) {
-                val robotWidthDp = (robotWidthMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
-                val robotLengthDp = (robotLengthMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
+                val robotWidthDp = (robotWidthMeter / FIELD_WIDTH_METERS * fitWidthDp.value).dp
+                val robotLengthDp = (robotLengthMeter / FIELD_HEIGHT_METERS * fitHeightDp.value).dp
 
                 RobotPoseEdit(
                     modifier =
@@ -153,8 +159,8 @@ fun PoseSelectorMainView(
                             .align(Alignment.BottomEnd)
                             .offset {
                                 IntOffset(
-                                    (robotOffset.x.dp.toPx() + (robotWidthDp.toPx() / 2)).roundToInt(),
-                                    (robotOffset.y.dp.toPx() + (robotLengthDp.toPx() / 2)).roundToInt(),
+                                    robotOffset.x.roundToInt(),
+                                    robotOffset.y.roundToInt(),
                                 )
                             },
                     rotation = robotRotation,
@@ -177,8 +183,8 @@ fun PoseSelectorMainView(
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                         .padding(12.dp),
             ) {
-                val frcX = (-robotOffset.y.dp.value / fitHeightDp.value) * FIELD_WIDTH_METERS
-                val frcY = (-robotOffset.x.dp.value / fitWidthDp.value) * FIELD_HEIGHT_METERS
+                val frcX = (-robotOffset.y / fitHeightPx) * FIELD_HEIGHT_METERS
+                val frcY = (-robotOffset.x / fitWidthPx) * FIELD_WIDTH_METERS
 
                 Text(text = "X: ${"%.2f".format(frcX)}m", color = Color.Red, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(text = "Y: ${"%.2f".format(frcY)}m", color = Color.Green, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -332,10 +338,10 @@ fun RobotPoseEdit(
         val dotOffsetY = (radiusPx.value * sin(angleRadForHandle)).dp
 
         // Pivot is at centerOffsetY.
-        // Relative to TopCenter of Box(robotWidth, visualHeight):
-        // Center is (centerX, centerOffsetY)
+        val handleCenterY = centerOffsetY + dotOffsetY
+
         val finalDotX = dotOffsetX
-        val finalDotY = centerOffsetY + dotOffsetY - (dotSize / 2)
+        val finalDotY = handleCenterY - dotSize
 
         Box(
             modifier =
@@ -344,17 +350,29 @@ fun RobotPoseEdit(
                     .offset(x = finalDotX, y = finalDotY)
                     .size(dotSize * 2) // Larger touch area
                     .pointerInput(Unit) {
+                        val centerX = robotWidth.toPx() / 2f
+                        val centerY = centerOffsetY.toPx()
                         detectDragGestures(
                             onDragStart = { isRotating = true },
                             onDragEnd = { isRotating = false },
                             onDragCancel = { isRotating = false },
                         ) { change, _ ->
                             change.consume()
-                            val localCenterX = size.width / 2f
-                            val localCenterY = centerOffsetY.toPx()
-                            val currentPos = change.position
-                            val currentVector = Offset(currentPos.x - localCenterX, currentPos.y - localCenterY)
-                            val angle = atan2(currentVector.y.toDouble(), currentVector.x.toDouble()).toFloat()
+
+                            // Get the absolute touch position in the parent coordinate space.
+                            // The touch 'change.position' is relative to the dot box's top-left.
+                            // The dot box's top-left in parent space is (centerX + finalDotX - dotSize, finalDotY).
+
+                            val dotBoxTopLeftX = centerX + finalDotX.toPx() - dotSize.toPx()
+                            val dotBoxTopLeftY = finalDotY.toPx()
+
+                            val touchX = dotBoxTopLeftX + change.position.x
+                            val touchY = dotBoxTopLeftY + change.position.y
+
+                            val vectorX = touchX - centerX
+                            val vectorY = touchY - centerY
+
+                            val angle = atan2(vectorY.toDouble(), vectorX.toDouble()).toFloat()
                             localRotation = angle + (Math.PI.toFloat() / 2f)
                             onRotate(localRotation)
                         }
