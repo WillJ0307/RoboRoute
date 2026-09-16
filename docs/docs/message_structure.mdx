@@ -1,0 +1,52 @@
+---
+title: Message Structure
+---
+
+## Android Device -> NTOverAOA
+
+### Subscribe Requests
+
+When the android app wants to start receiving a topic, it has to send a Subscribe request to NTOverAOA that looks like for example
+
+```json
+{"subscribe":["/robot/pose", "FMSInfo/isRedAlliance"]}
+```
+or
+
+```json
+{"action":"subscribe", "keys":["/robot/pose", "FMSInfo/isRedAlliance"]}
+```
+this will be what we will use going forward as it provides more flexibility
+
+### Send Requests (PUT Requests)
+
+When the android app wants to send data back like to run an action, the message will look like
+
+```json
+{"action":"put", "key":"/smartdashboard/foo", "value": 42}
+```
+
+## NTOverAOA -> Android Device
+
+### Listing Topics
+Sometimes it is useful to know all of the currently available topics from NetworkTables, every 10 seconds a list of topics is sent
+```json
+{"topics":["/foo","/bar"]}
+```
+
+### Receiving a value
+A value from network tables will look like this over AOA
+
+```json
+{"key":"/robot/pose","type":"Double","time":1234.5678,"value":42}
+```
+
+When using structs
+```json
+{"key":"/robot/pose","type":"Pose2d","time":1234.5678,"schema":"struct Pose2d {...}","value":{...}}
+```
+Decoded struct value example, decoded to match the struct schema
+
+```json
+{"translation":{"x":..,"y":..}, "rotation": {...}}
+```
