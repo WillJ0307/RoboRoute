@@ -196,19 +196,6 @@ fun MainView(
             }
         }
     }
-
-    if (!isPoseValid && !isEditing) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Robot Position Not Found") },
-            text = { Text("Can't find robot position. Please check your NetworkTables path and serial connection.") },
-            confirmButton = {
-                TextButton(onClick = onNavigateToSettings) {
-                    Text("Check Settings")
-                }
-            },
-        )
-    }
 }
 
 @Composable
