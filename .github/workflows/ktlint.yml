@@ -7,10 +7,12 @@ on:
     paths-ignore:
       - '/docs'
       - '/NTOverAOA'
+      - '/.github'
   pull_request:
     paths-ignore:
       - '/docs'
       - '/NTOverAOA'
+      - '/.github'
 
 jobs:
   ktlint:
