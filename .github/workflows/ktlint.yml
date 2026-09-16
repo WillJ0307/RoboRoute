@@ -2,8 +2,15 @@ name: Lint/Format Check (Android)
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    paths-ignore:
+      - '/docs'
+      - '/NTOverAOA'
   pull_request:
+    paths-ignore:
+      - '/docs'
+      - '/NTOverAOA'
 
 jobs:
   ktlint:
