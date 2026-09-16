@@ -41,11 +41,12 @@ A value from network tables will look like this over AOA
 {"key":"/robot/pose","type":"Double","time":1234.5678,"value":42}
 ```
 
-For structs
+When using structs
 ```json
 {"key":"/robot/pose","type":"Pose2d","time":1234.5678,"schema":"struct Pose2d {...}","value":{...}}
-
+```
 Decoded struct value example, decoded to match the struct schema
-{"translation":{"x":..,"y":..}, "rotation": {...}}
 
+```json
+{"translation":{"x":..,"y":..}, "rotation": {...}}
 ```
