@@ -3,4 +3,5 @@ pyusb
 libusb>=1.0.26
 adb-shell[usb]
 crossfiledialog
-ruff
+websocket-client
+ruff==0.16.6

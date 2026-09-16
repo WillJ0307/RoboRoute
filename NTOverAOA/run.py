@@ -13,19 +13,37 @@ except Exception:  # noqa: BLE001 - import raises NoImplementationFoundException
 import usb.core
 from classes.apk_installer import install_apk
 from classes.bridge import NTOverUSBBridge
+from classes.robot_ip import DriverStationInterop
+
+
+class IPSource(Enum):
+    AUTO = "Auto (Driver Station)"
+    MANUAL = "Manual"
+    SIMULATION = "Simulation"
+
+
+DEFAULT_SERVER_IP = "10.22.7.2"
 
 if sys.platform == "win32":
     from classes.winusb_installer import (
         _handle_elevated_winusb_install,
         _run_elevated_winusb_install,
     )
+else:
+
+    def _run_elevated_winusb_install(vid, pid, description):
+        raise RuntimeError("WinUSB driver installation is only available on Windows")
+
+    def _handle_elevated_winusb_install(request_path, result_path):
+        raise RuntimeError("WinUSB driver installation is only available on Windows")
 
 
 def _resource_path(*parts):
-    if hasattr(sys, "_MEIPASS"):
-        base = sys._MEIPASS
-    else:
+    base = getattr(sys, "_MEIPASS", None)
+
+    if base is None:
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
     return os.path.join(base, *parts)
 
 
@@ -49,7 +67,15 @@ class TKApp:
         self.style = ttk.Style()
         self.style.theme_use("clam")
 
-        self.ip_var = tk.StringVar(value="10.22.7.2")
+        self.ip_mode_var = tk.StringVar(
+            value=(
+                IPSource.AUTO.value
+                if sys.platform == "win32"
+                else IPSource.MANUAL.value
+            )
+        )
+        self.ip_var = tk.StringVar(value=DEFAULT_SERVER_IP)
+        self.ds = DriverStationInterop(on_update=self._on_ds_ip)
         self.usb_var = tk.StringVar()
         self.apk_var = tk.StringVar()
         self.connected = False
@@ -59,6 +85,7 @@ class TKApp:
 
         self._install_thread = None
         self._driver_install_thread = None
+        self.driver_install_btn = None
         self._install_lock = threading.Lock()
 
         self.bridge = NTOverUSBBridge(
@@ -72,6 +99,8 @@ class TKApp:
         self._sub_info = {}
 
         self._make_ui()
+        if sys.platform == "win32":
+            self.ds.start()
         self._rescan_for_usb_devices()
 
     def _make_ui(self):
@@ -90,14 +119,26 @@ class TKApp:
         row = ttk.Frame(conn)
         row.pack(fill=tk.X, pady=2)
 
-        ttk.Label(row, text="Server IP:", width=12).pack(side=tk.LEFT)
+        ttk.Label(row, text="Robot IP Source:", width=12).pack(side=tk.LEFT)
+
+        self.ip_mode_combo = ttk.Combobox(
+            row,
+            textvariable=self.ip_mode_var,
+            values=[source.value for source in self._available_ip_sources()],
+            width=18,
+            state="readonly",
+        )
+        self.ip_mode_combo.pack(side=tk.LEFT)
 
         self.ip_entry = ttk.Entry(
             row,
             textvariable=self.ip_var,
-            width=25,
+            width=22,
         )
-        self.ip_entry.pack(side=tk.LEFT)
+        self.ip_entry.pack(side=tk.LEFT, padx=(6, 0))
+        self.ip_mode_combo.bind("<<ComboboxSelected>>", self._on_ip_mode_selected)
+
+        self._update_ip_field()
 
         row = ttk.Frame(conn)
         row.pack(fill=tk.X, pady=2)
@@ -272,6 +313,50 @@ class TKApp:
         if candidates and not self.usb_var.get():
             self.usb_var.set(candidates[0][2])
 
+    def _available_ip_sources(self):
+        if sys.platform == "win32":
+            return list(IPSource)
+        return [IPSource.MANUAL, IPSource.SIMULATION]
+
+    def _on_ip_mode_selected(self, _event=None):
+        self._update_ip_field()
+
+    def _on_ds_ip(self, _ip):
+        self.root.after(0, self._update_ip_field)
+
+    def _update_ip_field(self):
+        mode = IPSource(self.ip_mode_var.get())
+
+        if mode is IPSource.MANUAL:
+            self.ip_entry.config(state=tk.NORMAL)
+            return
+
+        if mode is IPSource.SIMULATION:
+            self.ip_var.set("127.0.0.1")
+        elif self.ds.last_ip:
+            self.ip_var.set(self.ds.last_ip)
+
+        self.ip_entry.config(state="readonly")
+
+    def _resolve_server_ip(self):
+        mode = IPSource(self.ip_mode_var.get())
+
+        if mode is IPSource.MANUAL:
+            return self.ip_var.get().strip()
+
+        if mode is IPSource.SIMULATION:
+            return "127.0.0.1"
+
+        if self.ds.last_ip:
+            return self.ds.last_ip
+
+        ip = self.ds.fetch_once(timeout=2.0)
+        if ip:
+            self.root.after(0, self._update_ip_field)
+            return ip
+
+        return None
+
     def _choose_apk(self):
         if crossfiledialog is not None:
             path = crossfiledialog.open_file(
@@ -393,6 +478,10 @@ class TKApp:
         if self.connected:
             self._disconnect()
 
+        if self.driver_install_btn is None:
+            self._install_lock.release()
+            return
+
         self.driver_install_btn.config(state=tk.DISABLED, text="Installing...")
         self._driver_install_thread = threading.Thread(
             target=self._install_winusb_worker,
@@ -425,12 +514,14 @@ class TKApp:
             )
 
         finally:
-            self.root.after(
-                0,
-                lambda: self.driver_install_btn.config(
-                    state=tk.NORMAL, text="Install Driver"
-                ),
-            )
+
+            def reset_driver_button():
+                if self.driver_install_btn is not None:
+                    self.driver_install_btn.config(
+                        state=tk.NORMAL, text="Install Driver"
+                    )
+
+            self.root.after(0, reset_driver_button)
             self._install_lock.release()
 
     def _log(self, msg):
@@ -528,13 +619,15 @@ class TKApp:
         self.sub_count_label.config(text=f"{len(items)} subscribed")
 
     def _connect(self):
-        ip = self.ip_var.get().strip()
+        ip = self._resolve_server_ip()
         label = self.usb_var.get()
 
         if not ip:
             messagebox.showwarning(
                 "Missing",
-                "Enter a server IP address.",
+                "Could not get a robot IP from the Driver Station. "
+                "Start the Driver Station with a robot connected, or "
+                "switch the Robot IP source to Manual and enter the address.",
             )
             return
 
@@ -575,6 +668,7 @@ class TKApp:
         self._set_connection_state("nt", ConnectionState.DISCONNECTED)
 
     def _on_close(self):
+        self.ds.stop()
         self.bridge.stop()
         self.root.destroy()
 

@@ -103,6 +103,9 @@ class NTHandler:
         if key is None or value is None:
             return False
 
+        if self.inst is None:
+            return False
+
         self.inst.getTable("").putValue(key, value)
 
         return True
