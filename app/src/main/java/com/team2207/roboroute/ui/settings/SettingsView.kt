@@ -386,7 +386,7 @@ fun SerialLogSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("AOA / Serial Logs", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Logs", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Row {
                     IconButton(onClick = onManualSubscribe, modifier = Modifier.padding(end = 8.dp)) {
                         Icon(Icons.Default.Refresh, contentDescription = "Manual Subscribe")
