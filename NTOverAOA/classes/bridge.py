@@ -65,11 +65,9 @@ class NTOverUSBBridge:
                 self._process_usb_message()
                 self._process_nt_events()
                 self._process_initial_values()
-                if (
-                    not self.subscriptions.subscribed()
-                    and time.monotonic() - self._last_topic_send
-                    >= TOPIC_RESEND_INTERVAL
-                ):
+                # The periodic topic listing doubles as the liveness signal the tablet uses
+                # to detect a software disconnect, so send it even once subscribed.
+                if time.monotonic() - self._last_topic_send >= TOPIC_RESEND_INTERVAL:
                     self._send_topic_listing()
                     self._last_topic_send = time.monotonic()
                 time.sleep(0.02)
@@ -176,6 +174,14 @@ class NTOverUSBBridge:
             self._stop.set()
 
     def _disconnect(self):
+        # Tell the tablet we are going away before releasing the USB interface, so it can
+        # drop the stale accessory handle and reopen it for the next connection.
+        try:
+            if self.usb.is_connected():
+                message = (json.dumps({"disconnect": True}) + "\n").encode("utf-8")
+                self.usb.send_messages([message])
+        except Exception as error:  # noqa: BLE001 - best-effort notification
+            self._log(f"USB disconnect notify failed: {error}")
         try:
             self.usb.disconnect()
         except Exception as error:  # noqa: BLE001 - cleanup must continue
