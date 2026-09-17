@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,6 +74,7 @@ fun MainView(
     val livePose by viewModel.livePose.collectAsState()
     val isPoseValid by viewModel.isPoseValid.collectAsState()
     val isRedAlliance by viewModel.isRedAlliance.collectAsState()
+    val isAoaConnected by viewModel.isAoaConnected.collectAsState()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -185,6 +187,13 @@ fun MainView(
                     }
                 }
             } else {
+                ConnectionIndicator(
+                    isConnected = isAoaConnected,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp),
+                )
                 MenuButton(
                     onSettingsClick = onNavigateToSettings,
                     onEditLayoutClick = { viewModel.setEditing(true) },
@@ -195,6 +204,31 @@ fun MainView(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ConnectionIndicator(
+    isConnected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(if (isConnected) Color(0xFF4CAF50) else Color.Red),
+        )
+        Spacer(modifier = Modifier.size(8.dp))
+        Text(
+            text = (if (isConnected) "Connected" else "Disconnected"),
+            color = returnSecondaryColor(),
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

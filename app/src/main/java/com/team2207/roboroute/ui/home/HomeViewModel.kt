@@ -9,6 +9,7 @@ import com.team2207.roboroute.datastore.ButtonLayout
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.datastore.LayoutRepository
 import com.team2207.roboroute.datastore.Pose2d
+import com.team2207.roboroute.serial.AoaConnectionState
 import com.team2207.roboroute.serial.RobotPoseManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +27,7 @@ class HomeViewModel(
     val livePose: StateFlow<Pose2d> = RobotPoseManager.livePose
     val isPoseValid: StateFlow<Boolean> = RobotPoseManager.isPoseValid
     val isRedAlliance: StateFlow<Boolean> = RobotPoseManager.isRedAlliance
+    val isAoaConnected: StateFlow<Boolean> = AoaConnectionState.isConnected
 
     init {
         viewModelScope.launch {
