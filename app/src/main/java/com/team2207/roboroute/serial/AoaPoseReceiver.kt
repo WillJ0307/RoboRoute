@@ -17,6 +17,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -36,6 +39,15 @@ object AoaSubscribeTrigger {
     }
 }
 
+object AoaConnectionState {
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    fun setConnected(connected: Boolean) {
+        _isConnected.value = connected
+    }
+}
+
 class AoaPoseReceiver(
     private val context: Context,
     private val repository: ActionRepository,
@@ -51,6 +63,21 @@ class AoaPoseReceiver(
 
     private var currentNtPath: String = ""
     private val seenKeys = mutableSetOf<String>()
+    private var lastPermissionRequest = 0L
+
+    // Host liveness: the desktop bridge resends its topic listing every 10 seconds, which
+    // doubles as a liveness signal. A gap longer than the timeout means the host disconnected
+    // without a USB detach (e.g. the user clicked Disconnect), which otherwise leaves the
+    // blocking read parked.
+    @Volatile private var lastRxTime = 0L
+
+    @Volatile private var hostWasSeen = false
+
+    @Volatile private var recovering = false
+
+    @Volatile private var stopped = false
+
+    @Volatile private var lastOpenAttempt = 0L
 
     // Pending pose stages are coalesced and published at a fixed rate so a burst of
     // telemetry messages cannot flood the UI with recompositions.
@@ -70,6 +97,11 @@ class AoaPoseReceiver(
         private const val AXIS_X = 1
         private const val AXIS_Y = 2
         private const val AXIS_ROTATION = 4
+        private const val STALE_TIMEOUT_MS = 12000L
+        private const val SUPERVISOR_INTERVAL_MS = 1000L
+        private const val RECONNECT_DELAY_MS = 500L
+        private const val OPEN_RETRY_INTERVAL_MS = 3000L
+        private const val PERMISSION_RETRY_INTERVAL_MS = 15000L
     }
 
     private val usbReceiver =
@@ -78,20 +110,32 @@ class AoaPoseReceiver(
                 context: Context,
                 intent: Intent,
             ) {
-                if (ACTION_USB_PERMISSION == intent.action) {
-                    synchronized(this) {
-                        val usbAccessory: UsbAccessory? =
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+                when (intent.action) {
+                    ACTION_USB_PERMISSION -> {
+                        synchronized(this) {
+                            val usbAccessory: UsbAccessory? =
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+                                }
+                            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                                usbAccessory?.let { openAccessory(it) }
                             } else {
-                                @Suppress("DEPRECATION")
-                                intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+                                SerialLogManager.addLog("AOA: USB Permission denied")
                             }
-                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                            usbAccessory?.let { openAccessory(it) }
-                        } else {
-                            SerialLogManager.addLog("AOA: USB Permission denied")
                         }
+                    }
+
+                    UsbManager.ACTION_USB_ACCESSORY_ATTACHED -> {
+                        SerialLogManager.addLog("AOA: Accessory attached broadcast")
+                        if (accessory == null) findAndConnect()
+                    }
+
+                    UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
+                        SerialLogManager.addLog("AOA: Accessory detached broadcast")
+                        handleDetach()
                     }
                 }
             }
@@ -99,7 +143,12 @@ class AoaPoseReceiver(
 
     fun start() {
         SerialLogManager.addLog("AOA: Receiver instance starting...")
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        stopped = false
+        val filter =
+            IntentFilter(ACTION_USB_PERMISSION).apply {
+                addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
+                addAction(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
+            }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -107,6 +156,15 @@ class AoaPoseReceiver(
             context.registerReceiver(usbReceiver, filter)
         }
         findAndConnect()
+
+        // Liveness supervisor: recover the accessory link when the host goes silent, and
+        // keep retrying to (re)open the accessory while none is held.
+        scope.launch {
+            while (true) {
+                delay(SUPERVISOR_INTERVAL_MS)
+                superviseConnection()
+            }
+        }
 
         // Publish staged pose updates at a fixed rate regardless of incoming message rate.
         scope.launch {
@@ -155,7 +213,12 @@ class AoaPoseReceiver(
 
     fun handleIntent(intent: Intent) {
         SerialLogManager.addLog("AOA: Handling intent: ${intent.action}")
+        if (UsbManager.ACTION_USB_ACCESSORY_DETACHED == intent.action) {
+            handleDetach()
+            return
+        }
         if (UsbManager.ACTION_USB_ACCESSORY_ATTACHED == intent.action) {
+            if (accessory != null) return
             val usbAccessory: UsbAccessory? =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
@@ -191,6 +254,7 @@ class AoaPoseReceiver(
     }
 
     fun stop() {
+        stopped = true
         try {
             context.unregisterReceiver(usbReceiver)
         } catch (e: Exception) {
@@ -199,7 +263,15 @@ class AoaPoseReceiver(
         closeAccessory()
     }
 
+    private fun handleDetach() {
+        hostWasSeen = false
+        AoaConnectionState.setConnected(false)
+        closeAccessory()
+    }
+
     private fun findAndConnect() {
+        if (stopped || accessory != null) return
+
         val accessories = usbManager.accessoryList
         if (accessories.isNullOrEmpty()) {
             SerialLogManager.addLog("AOA: No accessories found in list")
@@ -212,6 +284,9 @@ class AoaPoseReceiver(
         if (usbManager.hasPermission(target)) {
             openAccessory(target)
         } else {
+            val now = System.currentTimeMillis()
+            if (now - lastPermissionRequest < PERMISSION_RETRY_INTERVAL_MS) return
+            lastPermissionRequest = now
             SerialLogManager.addLog("AOA: Requesting permission for ${target.model}")
             val flags = PendingIntent.FLAG_IMMUTABLE
             val permissionIntent = PendingIntent.getBroadcast(context, 0, Intent(ACTION_USB_PERMISSION), flags)
@@ -219,8 +294,60 @@ class AoaPoseReceiver(
         }
     }
 
+    // The host stopped talking (software disconnect) or the stream ended. Drop the stale
+    // accessory and reopen it so a subsequent host reconnect can succeed without restarting
+    // the app.
+    private fun recoverConnection() {
+        if (stopped || recovering) return
+        recovering = true
+        scope.launch {
+            try {
+                closeAccessory()
+                delay(RECONNECT_DELAY_MS)
+                findAndConnect()
+            } finally {
+                recovering = false
+            }
+        }
+    }
+
+    private fun superviseConnection() {
+        if (stopped) return
+        val now = System.currentTimeMillis()
+
+        if (hostWasSeen && now - lastRxTime > STALE_TIMEOUT_MS) {
+            SerialLogManager.addLog("AOA: Host link stale")
+            hostWasSeen = false
+            AoaConnectionState.setConnected(false)
+            recoverConnection()
+        } else if (!recovering && accessory == null && now - lastOpenAttempt > OPEN_RETRY_INTERVAL_MS) {
+            lastOpenAttempt = now
+            findAndConnect()
+        }
+    }
+
+    private fun markAlive() {
+        lastRxTime = System.currentTimeMillis()
+        if (!hostWasSeen) {
+            hostWasSeen = true
+            SerialLogManager.addLog("AOA: Host link alive")
+        }
+        AoaConnectionState.setConnected(true)
+    }
+
+    private fun onStreamClosed() {
+        if (stopped) return
+        hostWasSeen = false
+        AoaConnectionState.setConnected(false)
+        recoverConnection()
+    }
+
+    @Synchronized
     private fun openAccessory(usbAccessory: UsbAccessory) {
         if (accessory != null) {
+            // The attach broadcast and the activity's new intent both point at the same
+            // accessory; don't tear down a healthy link just to reopen the identical one.
+            if (outputStream != null && accessory == usbAccessory) return
             SerialLogManager.addLog("AOA: Accessory already open, closing old one first")
             closeAccessory()
         }
@@ -231,10 +358,11 @@ class AoaPoseReceiver(
         if (fileDescriptor != null) {
             accessory = usbAccessory
             val fd = fileDescriptor!!.fileDescriptor
-            inputStream = FileInputStream(fd)
+            val stream = FileInputStream(fd)
+            inputStream = stream
             outputStream = FileOutputStream(fd)
 
-            startReading()
+            startReading(stream)
 
             SerialLogManager.addLog("AOA: Accessory opened successfully")
 
@@ -258,18 +386,19 @@ class AoaPoseReceiver(
         accessory = null
         inputStream = null
         outputStream = null
+        AoaConnectionState.setConnected(false)
         SerialLogManager.addLog("AOA: Accessory closed")
     }
 
     private var lastDataLogTime = 0L
 
-    private fun startReading() {
+    private fun startReading(stream: InputStream) {
         scope.launch {
             val chunk = ByteArray(16384)
             val pending = ByteArrayOutputStream(4096)
             try {
                 while (true) {
-                    val bytesRead = inputStream?.read(chunk) ?: -1
+                    val bytesRead = stream.read(chunk)
                     if (bytesRead > 0) {
                         var lineStart = 0
                         for (i in 0 until bytesRead) {
@@ -306,11 +435,27 @@ class AoaPoseReceiver(
                 }
             } catch (e: IOException) {
                 SerialLogManager.addLog("AOA: Read Error: ${e.message}")
+            } finally {
+                // Ignore the closure of a stream that has already been replaced by a newer open.
+                if (inputStream === stream) {
+                    onStreamClosed()
+                }
             }
         }
     }
 
     private fun processLine(line: String) {
+        if (line.contains("\"disconnect\":")) {
+            SerialLogManager.addLog("AOA: Host disconnect message received")
+            hostWasSeen = false
+            AoaConnectionState.setConnected(false)
+            recoverConnection()
+            return
+        }
+
+        // Any traffic from the host proves the link is alive.
+        markAlive()
+
         // Fast path: only handle value messages. This skips the (possibly huge) topic listing
         // and other protocol messages without building a full Gson tree for them.
         if (!line.startsWith("{") || !line.contains("\"key\"")) {
