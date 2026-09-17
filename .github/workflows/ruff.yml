@@ -4,10 +4,10 @@ on:
     branches:
       - main
     paths:
-      - '/NTOverAOA'
+      - 'NTOverAOA/**'
   pull_request:
     paths:
-      - '/NTOverAOA'
+      - 'NTOverAOA/**'
 
 jobs:
   build:
