@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,6 +156,7 @@ fun MainView(
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx,
+                            fieldRotation = fieldRotation,
                         )
                     }
                 }
@@ -245,9 +247,11 @@ fun CircularButton(
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
     maxHeight: Float,
+    fieldRotation: Float,
 ) {
     var showActionDialog by remember { mutableStateOf(false) }
     val assignedAction = actions.find { it.id == button.actionId }
+    val currentActionId by rememberUpdatedState(button.actionId)
     val density = LocalDensity.current
 
     var localX by remember { mutableStateOf(button.x) }
@@ -299,7 +303,7 @@ fun CircularButton(
                                 change.consume()
                                 localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
                                 localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
-                                onUpdate(localX, localY, localRadius, button.actionId)
+                                onUpdate(localX, localY, localRadius, currentActionId)
                             }
                         }
                     }.clickable {
@@ -316,6 +320,7 @@ fun CircularButton(
                 color = Color.White,
                 fontSize = with(density) { (localRadius / 3).toSp() },
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.graphicsLayer { rotationZ = -fieldRotation },
             )
         }
 
@@ -343,7 +348,7 @@ fun CircularButton(
                                     val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
                                     val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
                                     localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
-                                    onUpdate(localX, localY, localRadius, button.actionId)
+                                    onUpdate(localX, localY, localRadius, currentActionId)
                                 }
                             },
                 )
