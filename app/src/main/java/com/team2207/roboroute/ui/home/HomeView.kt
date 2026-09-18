@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.team2207.roboroute.R
+import com.team2207.roboroute.datastore.ActionType
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
 import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
@@ -364,8 +366,17 @@ fun CircularButton(
                     } else {
                         LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                             items(actions) { action ->
+                                val actionLabel =
+                                    when {
+                                        action.name.isNotBlank() -> action.name
+                                        action.actionType == ActionType.POSE ->
+                                            "Pose Selection: (${"%.2f".format(action.pose.x)}, " +
+                                                "${"%.2f".format(action.pose.y)}, ${"%.2f".format(action.pose.rotation)} rad)"
+                                        else -> "Unnamed"
+                                    }
                                 ListItem(
-                                    headlineContent = { Text(action.name) },
+                                    headlineContent = { Text(actionLabel) },
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     modifier =
                                         Modifier.clickable {
                                             onUpdate(button.x, button.y, button.radius, action.id)
