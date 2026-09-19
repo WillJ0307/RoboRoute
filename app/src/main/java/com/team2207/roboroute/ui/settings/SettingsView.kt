@@ -246,7 +246,7 @@ fun SettingsView(
                     initialAction = editingAction,
                 )
 
-                Spacer(modifier = Modifier.padding(8.dp))
+                Spacer(modifier = Modifier.padding(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -278,23 +278,6 @@ fun SettingsView(
                     ) {
                         Text("Import JSON")
                     }
-                }
-
-                Spacer(modifier = Modifier.padding(8.dp))
-
-                Button(
-                    onClick = { viewModel.manualSubscribe() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors =
-                        ButtonColors(
-                            containerColor = returnPrimaryColor(),
-                            contentColor = returnSecondaryColor(),
-                            disabledContainerColor = Color.Gray,
-                            disabledContentColor = Color.White,
-                        ),
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Check Alliance / Re-Subscribe")
                 }
 
                 Spacer(modifier = Modifier.padding(4.dp))
