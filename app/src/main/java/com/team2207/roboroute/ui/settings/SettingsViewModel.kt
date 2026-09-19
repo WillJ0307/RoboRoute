@@ -47,6 +47,21 @@ class SettingsViewModel(
         }
     }
 
+    fun deleteAction(actionId: Int) {
+        viewModelScope.launch {
+            actionRepository.deleteAction(actionId)
+            // Clear any buttons that referenced the deleted action so they aren't left dangling.
+            layoutRepository.updateLayout { builder ->
+                for (index in builder.buttonsList.indices) {
+                    val button = builder.getButtons(index)
+                    if (button.actionId == actionId) {
+                        builder.setButtons(index, button.toBuilder().setActionId(0).build())
+                    }
+                }
+            }
+        }
+    }
+
     fun updateNtPath(path: String) {
         viewModelScope.launch {
             actionRepository.updateNtPath(path)

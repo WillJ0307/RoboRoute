@@ -67,7 +67,7 @@ fun ActionCreationScreen(
     initialAction: Action? = null,
 ) {
     // 1. Text field input states, initialized from initialAction if available
-    var nameInput by remember {
+    var nameInput by remember(initialAction) {
         mutableStateOf(
             initialAction?.let {
                 when (it) {
@@ -78,7 +78,7 @@ fun ActionCreationScreen(
         )
     }
 
-    var ntRouteInput by remember {
+    var ntRouteInput by remember(initialAction) {
         mutableStateOf(
             initialAction?.let {
                 when (it) {
@@ -90,7 +90,7 @@ fun ActionCreationScreen(
     }
 
     // 2. Track which tab is currently selected
-    var selectedTab by remember {
+    var selectedTab by remember(initialAction, currentPose) {
         mutableStateOf(
             when {
                 currentPose != null -> ActionType.POSE_SELECTION
@@ -131,7 +131,8 @@ fun ActionCreationScreen(
                                         pathName = ntRouteInput.trim(),
                                     )
                                 ActionType.POSE_SELECTION -> {
-                                    currentPose?.copy(id = initialAction?.actionId ?: 0, name = nameInput.trim())
+                                    currentPose
+                                        ?.let { pose -> pose.copy(id = initialAction?.actionId ?: pose.id, name = nameInput.trim()) }
                                         ?: (initialAction as? Action.PoseSelection)?.copy(name = nameInput.trim())
                                         ?: Action.PoseSelection(id = initialAction?.actionId ?: 0, name = nameInput.trim())
                                 }
