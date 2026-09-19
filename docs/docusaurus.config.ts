@@ -93,10 +93,6 @@ const config: Config = {
           position: 'right',
         },
         {
-          type: 'docsVersionDropdown',
-          position: 'right',
-        },
-        {
           href: 'https://github.com/FRC2207/RoboRoute',
           label: 'GitHub',
           position: 'right',

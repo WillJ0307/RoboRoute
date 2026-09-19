@@ -58,7 +58,6 @@ import com.team2207.roboroute.R
 import com.team2207.roboroute.datastore.ActionType
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
-import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
 import com.team2207.roboroute.ui.action.RobotVisual
 import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
@@ -98,8 +97,12 @@ fun MainView(
             val density = LocalDensity.current.density
             val fitWidthDp = (imgSize.width * scale / density).dp
             val fitHeightDp = (imgSize.height * scale / density).dp
+            val fitHeightPx = imgSize.height * scale
 
             val fieldRotation = if (isRedAlliance) 0f else 180f
+
+            // Pixels per meter should be consistent.
+            val pxPerMeter = fitHeightPx / FIELD_HEIGHT_METERS
 
             Box(
                 modifier =
@@ -123,11 +126,12 @@ fun MainView(
                     val xMeter = livePose.x
                     val yMeter = livePose.y
 
-                    val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
-                    val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
+                    // Consistent mapping: X (Short) -> Vertical, Y (Long) -> Horizontal
+                    val xOffsetDp = -(xMeter * pxPerMeter / density).dp
+                    val yOffsetDp = -(yMeter * pxPerMeter / density).dp
 
-                    val robotWidthDp = (appData.robotWidth / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
-                    val robotLengthDp = (appData.robotLength / FIELD_WIDTH_METERS * fitHeightDp.value).dp
+                    val robotWidthDp = (appData.robotWidth * pxPerMeter / density).dp
+                    val robotLengthDp = (appData.robotLength * pxPerMeter / density).dp
 
                     RobotVisual(
                         modifier =
