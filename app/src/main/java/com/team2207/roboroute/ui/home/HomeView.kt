@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.team2207.roboroute.R
+import com.team2207.roboroute.datastore.ActionType
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
 import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
@@ -152,6 +156,7 @@ fun MainView(
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx,
+                            fieldRotation = fieldRotation,
                         )
                     }
                 }
@@ -242,9 +247,11 @@ fun CircularButton(
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
     maxHeight: Float,
+    fieldRotation: Float,
 ) {
     var showActionDialog by remember { mutableStateOf(false) }
     val assignedAction = actions.find { it.id == button.actionId }
+    val currentActionId by rememberUpdatedState(button.actionId)
     val density = LocalDensity.current
 
     var localX by remember { mutableStateOf(button.x) }
@@ -296,7 +303,7 @@ fun CircularButton(
                                 change.consume()
                                 localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
                                 localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
-                                onUpdate(localX, localY, localRadius, button.actionId)
+                                onUpdate(localX, localY, localRadius, currentActionId)
                             }
                         }
                     }.clickable {
@@ -313,6 +320,7 @@ fun CircularButton(
                 color = Color.White,
                 fontSize = with(density) { (localRadius / 3).toSp() },
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.graphicsLayer { rotationZ = -fieldRotation },
             )
         }
 
@@ -340,7 +348,7 @@ fun CircularButton(
                                     val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
                                     val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
                                     localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
-                                    onUpdate(localX, localY, localRadius, button.actionId)
+                                    onUpdate(localX, localY, localRadius, currentActionId)
                                 }
                             },
                 )
@@ -364,8 +372,17 @@ fun CircularButton(
                     } else {
                         LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                             items(actions) { action ->
+                                val actionLabel =
+                                    when {
+                                        action.name.isNotBlank() -> action.name
+                                        action.actionType == ActionType.POSE ->
+                                            "Pose Selection: (${"%.2f".format(action.pose.x)}, " +
+                                                "${"%.2f".format(action.pose.y)}, ${"%.2f".format(action.pose.rotation)} rad)"
+                                        else -> "Unnamed"
+                                    }
                                 ListItem(
-                                    headlineContent = { Text(action.name) },
+                                    headlineContent = { Text(actionLabel) },
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     modifier =
                                         Modifier.clickable {
                                             onUpdate(button.x, button.y, button.radius, action.id)
@@ -389,12 +406,11 @@ fun CircularButton(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showActionDialog = false }) {
-                    Text("Close")
-                }
-            },
-            dismissButton = {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     TextButton(
                         onClick = {
                             onDelete()
@@ -402,6 +418,9 @@ fun CircularButton(
                         },
                     ) {
                         Text("Delete Button", color = Color.Red)
+                    }
+                    TextButton(onClick = { showActionDialog = false }) {
+                        Text("Close")
                     }
                 }
             },
