@@ -38,6 +38,17 @@ class ActionRepository(
         }
     }
 
+    suspend fun deleteAction(actionId: Int) {
+        context.dataStore.updateData { currentAppData ->
+            val builder = currentAppData.toBuilder()
+            val existingIndex = builder.actionsList.indexOfFirst { it.id == actionId }
+            if (existingIndex != -1) {
+                builder.removeActions(existingIndex)
+            }
+            builder.build()
+        }
+    }
+
     suspend fun updateNtPath(path: String) {
         context.dataStore.updateData { currentAppData ->
             currentAppData

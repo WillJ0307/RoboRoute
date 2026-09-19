@@ -17,8 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +34,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,9 +80,32 @@ fun SettingsView(
     var localLength by remember(appData.robotLength) { mutableStateOf(appData.robotLength.toString()) }
 
     var draftPose by remember { mutableStateOf<UIAction.PoseSelection?>(null) }
-    var editingAction by remember { mutableStateOf<UIAction?>(null) }
+    // rememberSaveable so the edited action survives navigating to the pose selector and back.
+    var editingActionId by rememberSaveable { mutableStateOf<Int?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var showLogSheet by remember { mutableStateOf(false) }
+    var actionToDelete by remember { mutableStateOf<ProtoAction?>(null) }
+
+    val editingAction: UIAction? =
+        editingActionId?.let { id ->
+            appData.actionsList
+                .firstOrNull { it.id == id }
+                ?.let { action ->
+                    when (action.actionType) {
+                        ProtoActionType.PATHPLANNER ->
+                            UIAction.PathPlanner(action.id, action.name, action.pathName)
+                        ProtoActionType.POSE ->
+                            UIAction.PoseSelection(
+                                action.id,
+                                action.name,
+                                action.pose.x,
+                                action.pose.y,
+                                action.pose.rotation,
+                            )
+                        else -> null
+                    }
+                }
+        }
 
     val exportLauncher =
         rememberLauncherForActivityResult(
@@ -100,7 +128,7 @@ fun SettingsView(
         val r = savedState?.get<Double>("pose_r")
 
         if (x != null && y != null && r != null) {
-            draftPose = UIAction.PoseSelection(id = editingAction?.actionId ?: 0, name = "", x = x, y = y, r = r)
+            draftPose = UIAction.PoseSelection(id = editingActionId ?: 0, name = "", x = x, y = y, r = r)
             showSheet = true
             savedState.remove<Double>("pose_x")
             savedState.remove<Double>("pose_y")
@@ -192,7 +220,7 @@ fun SettingsView(
 
                 Spacer(modifier = Modifier.padding(8.dp))
 
-                NewActionSheetAndButtonToCreate(
+                ActionEditorSheet(
                     onSaveAction = { uiAction ->
                         val protoAction =
                             ProtoAction
@@ -231,14 +259,14 @@ fun SettingsView(
                                 }.build()
                         viewModel.saveAction(protoAction)
                         draftPose = null
-                        editingAction = null
+                        editingActionId = null
                     },
                     onEditPose = { x, y, r -> onEditPose(x, y, r, appData.robotWidth, appData.robotLength) },
                     showSheetInitial = showSheet,
                     onSheetVisibilityChange = {
                         showSheet = it
+                        editingActionId = null
                         if (!it) {
-                            editingAction = null
                             draftPose = null
                         }
                     },
@@ -299,7 +327,27 @@ fun SettingsView(
 
                 Spacer(modifier = Modifier.padding(8.dp))
 
-                Text("Saved Actions", fontWeight = FontWeight.Bold, color = returnPrimaryColor())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Saved Actions", fontWeight = FontWeight.Bold, color = returnPrimaryColor())
+                    IconButton(
+                        onClick = {
+                            editingActionId = null
+                            draftPose = null
+                            showSheet = true
+                        },
+                        colors =
+                            IconButtonDefaults.iconButtonColors(
+                                containerColor = returnPrimaryColor(),
+                                contentColor = returnSecondaryColor(),
+                            ),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Create New Action")
+                    }
+                }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -317,21 +365,18 @@ fun SettingsView(
                                     },
                                 )
                             },
+                            trailingContent = {
+                                IconButton(onClick = { actionToDelete = action }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete ${action.name}",
+                                        tint = returnPrimaryColor(),
+                                    )
+                                }
+                            },
                             modifier =
                                 Modifier.clickable {
-                                    editingAction =
-                                        when (action.actionType) {
-                                            ProtoActionType.PATHPLANNER -> UIAction.PathPlanner(action.id, action.name, action.pathName)
-                                            ProtoActionType.POSE ->
-                                                UIAction.PoseSelection(
-                                                    action.id,
-                                                    action.name,
-                                                    action.pose.x,
-                                                    action.pose.y,
-                                                    action.pose.rotation,
-                                                )
-                                            else -> null
-                                        }
+                                    editingActionId = action.id
                                     showSheet = true
                                 },
                         )
@@ -339,6 +384,34 @@ fun SettingsView(
                 }
             }
         }
+    }
+
+    actionToDelete?.let { action ->
+        AlertDialog(
+            onDismissRequest = { actionToDelete = null },
+            title = { Text("Delete Action") },
+            text = { Text("Are you sure you want to delete this action? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteAction(action.id)
+                        if (editingActionId == action.id) {
+                            editingActionId = null
+                            draftPose = null
+                            showSheet = false
+                        }
+                        actionToDelete = null
+                    },
+                ) {
+                    Text("Delete", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { actionToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showLogSheet) {
@@ -396,7 +469,7 @@ fun SerialLogSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewActionSheetAndButtonToCreate(
+fun ActionEditorSheet(
     onSaveAction: (UIAction) -> Unit,
     onEditPose: (Double, Double, Double) -> Unit,
     showSheetInitial: Boolean = false,
@@ -411,52 +484,33 @@ fun NewActionSheetAndButtonToCreate(
         showBottomSheet = showSheetInitial
     }
 
-    Column {
-        Button(
-            onClick = {
-                showBottomSheet = true
-                onSheetVisibilityChange(true)
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showBottomSheet = false
+                onSheetVisibilityChange(false)
             },
-            colors =
-                ButtonColors(
-                    containerColor = returnPrimaryColor(),
-                    contentColor = returnSecondaryColor(),
-                    disabledContentColor = returnSecondaryColor(),
-                    disabledContainerColor = Color.LightGray,
-                ),
-            modifier = Modifier.fillMaxWidth(),
+            sheetState = sheetState,
         ) {
-            Text("Configure New Action")
-        }
-
-        if (showBottomSheet) {
-            ModalBottomSheet(
-                onDismissRequest = {
+            ActionCreationScreen(
+                onDismiss = {
                     showBottomSheet = false
                     onSheetVisibilityChange(false)
                 },
-                sheetState = sheetState,
-            ) {
-                ActionCreationScreen(
-                    onDismiss = {
-                        showBottomSheet = false
-                        onSheetVisibilityChange(false)
-                    },
-                    onSaveAction = { action ->
-                        onSaveAction(action)
-                        showBottomSheet = false
-                        onSheetVisibilityChange(false)
-                    },
-                    onEditPose = {
-                        val currentX = currentPose?.x ?: (initialAction as? UIAction.PoseSelection)?.x ?: 0.0
-                        val currentY = currentPose?.y ?: (initialAction as? UIAction.PoseSelection)?.y ?: 0.0
-                        val currentR = currentPose?.r ?: (initialAction as? UIAction.PoseSelection)?.r ?: 0.0
-                        onEditPose(currentX, currentY, currentR)
-                    },
-                    currentPose = currentPose,
-                    initialAction = initialAction,
-                )
-            }
+                onSaveAction = { action ->
+                    onSaveAction(action)
+                    showBottomSheet = false
+                    onSheetVisibilityChange(false)
+                },
+                onEditPose = {
+                    val currentX = currentPose?.x ?: (initialAction as? UIAction.PoseSelection)?.x ?: 0.0
+                    val currentY = currentPose?.y ?: (initialAction as? UIAction.PoseSelection)?.y ?: 0.0
+                    val currentR = currentPose?.r ?: (initialAction as? UIAction.PoseSelection)?.r ?: 0.0
+                    onEditPose(currentX, currentY, currentR)
+                },
+                currentPose = currentPose,
+                initialAction = initialAction,
+            )
         }
     }
 }
