@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Download bundles
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: RoboRoute-bundles
           path: release-assets
