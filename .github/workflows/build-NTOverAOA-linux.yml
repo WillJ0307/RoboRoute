@@ -65,7 +65,7 @@ jobs:
           fi
 
       - name: Upload executable
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: NTOverAOA-linux-x86_64
           path: NTOverAOA/dist/NTOverAOA-linux-x86_64.run
@@ -127,7 +127,7 @@ jobs:
           fi
 
       - name: Upload executable
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: NTOverAOA-linux-arm64
           path: NTOverAOA/dist/NTOverAOA-linux-arm64.run

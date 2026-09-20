@@ -40,7 +40,7 @@ jobs:
 
       # Step 5: Upload the compiled APK so you can download it from GitHub
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: android-debug-apk
           path: app/build/outputs/apk/debug/*.apk
