@@ -45,8 +45,8 @@ NON_ANDROID_CLASSES = {
 MANUFACTURER = "NTOverAOA"
 MODEL = "Adapter"
 DESCRIPTION = "Sends NetworkTables Data to a Android Device With AOA"
-VERSION = "1.2"  # :)
-URI = "https://github.com/aidan-j532/NTOverSerial"
+VERSION = "1.2"
+URI = "https://github.com/FRC2207/RoboRoute"
 SERIAL = "NTOverAOA"
 
 WRITE_TIMEOUT = 3000
