@@ -24,3 +24,5 @@ updates:
       interval: "monthly"
     groups:
       actions-deps:
+        patterns:
+          - "*"
