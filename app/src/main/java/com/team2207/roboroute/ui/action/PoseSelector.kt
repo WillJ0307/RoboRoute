@@ -73,6 +73,8 @@ fun PoseSelectorMainView(
     var robotOffset by remember { mutableStateOf(Offset.Zero) }
     var robotRotation by remember { mutableStateOf(initialR.toFloat()) }
     var isInitialized by remember { mutableStateOf(false) }
+    // Guards against a fast double-tap popping the back stack more than once.
+    var isNavigating by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -114,7 +116,12 @@ fun PoseSelectorMainView(
             FullScreenImage(modifier = Modifier.fillMaxSize())
 
             IconButton(
-                onClick = onBack,
+                onClick = {
+                    if (!isNavigating) {
+                        isNavigating = true
+                        onBack()
+                    }
+                },
                 modifier =
                     Modifier
                         .align(Alignment.TopStart)
@@ -130,10 +137,13 @@ fun PoseSelectorMainView(
 
             IconButton(
                 onClick = {
-                    val confirmX = (-robotOffset.y / fitHeightPx) * FIELD_HEIGHT_METERS
-                    val confirmY = (-robotOffset.x / fitWidthPx) * FIELD_WIDTH_METERS
-                    onConfirm(confirmX, confirmY, robotRotation.toDouble())
-                    onBack()
+                    if (!isNavigating) {
+                        isNavigating = true
+                        val confirmX = (-robotOffset.y / fitHeightPx) * FIELD_HEIGHT_METERS
+                        val confirmY = (-robotOffset.x / fitWidthPx) * FIELD_WIDTH_METERS
+                        onConfirm(confirmX, confirmY, robotRotation.toDouble())
+                        onBack()
+                    }
                 },
                 modifier =
                     Modifier
