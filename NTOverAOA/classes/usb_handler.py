@@ -344,11 +344,14 @@ class USBHandler:
         if action == "put":
             if "key" not in data or "value" not in data:
                 raise ValueError("put action requires key and value")
-            return {
+            message = {
                 "action": "put",
                 "key": data["key"],
                 "value": data["value"],
             }
+            if "schema" in data:
+                message["schema"] = data["schema"]
+            return message
 
         if "subscribe" in data:
             keys = data.get("subscribe")
@@ -358,7 +361,10 @@ class USBHandler:
 
         key = data.get("key")
         if key is not None and "value" in data:
-            return {"action": "put", "key": key, "value": data["value"]}
+            message = {"action": "put", "key": key, "value": data["value"]}
+            if "schema" in data:
+                message["schema"] = data["schema"]
+            return message
 
         raise ValueError("USB message has no recognized action")
 

@@ -31,6 +31,59 @@ _FIELD_RE = re.compile(
     r"\s*(?:\[\s*(?P<count2>\?|\d+)\s*\])?"
     r"\s*(?::\s*(?P<bits>\d+))?\s*;?\s*$"
 )
+_INLINE_STRUCT_RE = re.compile(r"struct\s+([A-Za-z_]\w*)\s*\{")
+
+
+def _strip_wrapper(text):
+    text = re.sub(r"^struct\s+[A-Za-z_]\w*\s*\{?", "", text.strip(), count=1)
+    return re.sub(r"}\s*$", "", text.strip())
+
+
+def struct_name(schema):
+    match = re.match(r"^\s*struct\s+([A-Za-z_]\w*)", schema)
+    return match.group(1) if match else None
+
+
+def _extract_nested(text):
+    """Replace inline `struct Name { ... } field;` defs with `Name field;` refs.
+
+    Returns (text_with_refs, {nested_name: full_nested_schema}).
+    """
+    nested = {}
+    pos = 0
+    while True:
+        match = _INLINE_STRUCT_RE.search(text, pos)
+        if match is None:
+            break
+        name = match.group(1)
+        open_brace = match.end() - 1
+        depth = 1
+        i = open_brace + 1
+        while i < len(text) and depth:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        if depth:
+            raise ValueError(f"unbalanced inline struct: {name}")
+        close = i - 1
+        body = text[open_brace + 1 : close].strip()
+        if _INLINE_STRUCT_RE.search(body):
+            pos = match.start() + 1
+            continue
+        j = close + 1
+        while j < len(text) and text[j] in " \t\r\n":
+            j += 1
+        k = j
+        while k < len(text) and text[k] != ";":
+            k += 1
+        tail = text[j:k].strip()
+        nested[name] = f"struct {name} {{{body}}}"
+        reference = f"{name} {tail};"
+        text = text[:match.start()] + reference + text[k + 1 :]
+        pos = 0
+    return text, nested
 
 
 def _parse_enum(spec):
@@ -51,8 +104,9 @@ def _parse_enum(spec):
 
 
 def parse_schema(schema):
+    text, _ = _extract_nested(_strip_wrapper(schema))
     fields = []
-    for decl in schema.split(";"):
+    for decl in text.split(";"):
         decl = decl.strip()
         if not decl:
             continue
@@ -117,11 +171,17 @@ class SchemaRegistry:
         self._schemas = {}
         self._aliases = {}
 
-    def register(self, struct_name, schema):
+    def register(self, struct_name, schema, _depth=0):
+        if _depth > 8:
+            return False
+        if "{" in schema and not schema.strip().endswith("}"):
+            self._fields.pop(struct_name, None)
+            return False
         self._schemas[struct_name] = schema
 
         try:
-            fields = parse_schema(schema)
+            text, nested = _extract_nested(_strip_wrapper(schema))
+            fields = parse_schema(text)
         except (KeyError, TypeError, ValueError):
             self._fields.pop(struct_name, None)
             return False
@@ -135,11 +195,25 @@ class SchemaRegistry:
         if alias and alias not in self._fields and alias not in self._aliases:
             self._aliases[alias] = struct_name
 
-        return True
+        names = [struct_name]
+        for nested_name, nested_schema in nested.items():
+            if nested_name not in self._fields and self.register(
+                nested_name, nested_schema, _depth + 1
+            ):
+                names.append(nested_name)
+        return names
+
+    _TYPE_PREFIXES = ("struct:", "photonstruct:")
 
     def _resolve(self, name):
         if name in self._fields:
             return name
+        for prefix in self._TYPE_PREFIXES:
+            if name.startswith(prefix):
+                base = name[len(prefix) :]
+                if base in self._fields:
+                    return base
+                break
         return self._aliases.get(name)
 
     def has_type(self, type_str):
@@ -176,6 +250,33 @@ class SchemaRegistry:
                 out[f["name"]], pos = self._decode_field(buf, pos, f)
         pos = self._flush(cur, pos)
         return out, pos
+
+    def encode_struct(self, struct_name, data):
+        resolved = self._resolve(struct_name)
+        if resolved is None:
+            raise KeyError(f"unknown struct schema: {struct_name}")
+        out = bytearray()
+        cur = None
+        for f in self._fields[resolved]:
+            name = f["name"]
+            if name not in data:
+                raise ValueError(f"missing field: {name}")
+            if f["bits"] is not None:
+                cur, out = self._encode_bitfield(out, cur, f, data[name])
+            else:
+                cur = self._flush_encode(cur, out)
+                self._encode_field(out, f, data[name])
+        self._flush_encode(cur, out)
+        return bytes(out)
+
+    def encode_type(self, type_str, data):
+        if self._resolve(type_str) is not None:
+            return self.encode_struct(type_str, data)
+        if type_str.endswith("[]"):
+            base = type_str[:-2]
+            if self._resolve(base) is not None:
+                return b"".join(self.encode_struct(base, v) for v in data)
+        raise KeyError(f"unknown struct schema: {type_str}")
 
     def decode_type(self, type_str, buf):
         if self._resolve(type_str) is not None:
@@ -264,3 +365,76 @@ class SchemaRegistry:
         if f["enum"] is not None and val in f["enum"]:
             val = f["enum"][val]
         return val
+
+    def _encode_field(self, out, f, val):
+        if f["vla"]:
+            out.append(len(val))
+            for item in val:
+                self._encode_one(out, f, item)
+            return
+        if f["optional"]:
+            if val is None:
+                out.append(0)
+                return
+            out.append(1)
+            self._encode_one(out, f, val)
+            return
+        if f["count"] > 1 and f["type"] != "char":
+            for item in val:
+                self._encode_one(out, f, item)
+            return
+        if f["type"] == "char" and f["count"] > 1:
+            encoded = val.encode("utf-8", "replace")
+            if len(encoded) > f["count"] - 1:
+                encoded = encoded[: f["count"] - 1]
+            out += encoded
+            out += b"\x00" * (f["count"] - len(encoded))
+            return
+        self._encode_one(out, f, val)
+
+    def _encode_one(self, out, f, val):
+        if f["struct"]:
+            out += self.encode_struct(f["type"], val)
+            return
+        if f["enum"] is not None and isinstance(val, str):
+            by_name = {value: key for key, value in f["enum"].items()}
+            if val not in by_name:
+                raise ValueError(f"unknown enum value: {val}")
+            val = by_name[val]
+        fmt, _, _ = _TYPES[f["type"]]
+        out += _struct.pack("<" + fmt, val)
+
+    def _encode_bitfield(self, out, cur, f, val):
+        is_bool = f["type"] == "bool"
+        size = 1 if is_bool else _TYPES[f["type"]][1]
+        width = f["bits"]
+        if cur is not None:
+            remaining = cur["size"] * 8 - cur["start_bit"]
+            if is_bool:
+                if remaining >= 1:
+                    cur["raw"] |= (1 if val else 0) << cur["start_bit"]
+                    cur["start_bit"] += 1
+                    return cur, out
+            elif cur["size"] == size and remaining >= width:
+                cur["raw"] |= self._enumerize(val, f) << cur["start_bit"]
+                cur["start_bit"] += width
+                return cur, out
+        out += cur["raw"].to_bytes(cur["size"], "little") if cur is not None else b""
+        storage_size = size if not is_bool else 1
+        cur = {"size": storage_size, "start_bit": 0, "raw": 0}
+        cur["raw"] |= self._enumerize(val, f) << cur["start_bit"]
+        cur["start_bit"] += width
+        return cur, out
+
+    def _enumerize(self, val, f):
+        if f["enum"] is not None and isinstance(val, str):
+            by_name = {value: key for key, value in f["enum"].items()}
+            if val not in by_name:
+                raise ValueError(f"unknown enum value: {val}")
+            val = by_name[val]
+        return int(val) & ((1 << f["bits"]) - 1)
+
+    @staticmethod
+    def _flush_encode(cur, out):
+        if cur is not None:
+            out += cur["raw"].to_bytes(cur["size"], "little")

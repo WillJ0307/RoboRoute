@@ -16,9 +16,9 @@ class NTOverUSBBridge:
         self, usb=None, nt=None, on_log=None, on_state=None, on_subscription=None
     ):
         self.usb = usb or USBHandler()
-        self.nt = nt or NTHandler()
-        self.subscriptions = SubscriptionState()
         self.on_log = on_log or (lambda _message: None)
+        self.nt = nt or NTHandler(on_log=self.on_log)
+        self.subscriptions = SubscriptionState()
         self.on_state = on_state or (lambda _name, _state: None)
         self.on_subscription = on_subscription or (lambda _key, _info: None)
 
