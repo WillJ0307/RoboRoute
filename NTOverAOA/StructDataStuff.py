@@ -81,7 +81,7 @@ def _extract_nested(text):
         tail = text[j:k].strip()
         nested[name] = f"struct {name} {{{body}}}"
         reference = f"{name} {tail};"
-        text = text[:match.start()] + reference + text[k + 1 :]
+        text = text[: match.start()] + reference + text[k + 1 :]
         pos = 0
     return text, nested
 
