@@ -3,7 +3,7 @@ import json
 import time
 
 import ntcore
-from StructDataStuff import SchemaRegistry
+from StructDataStuff import SchemaRegistry, struct_name
 
 
 def value_to_json(v):
@@ -23,7 +23,7 @@ def value_to_json(v):
 
 
 class NTHandler:
-    def __init__(self, client_name="NTOverAOA", registry=None):
+    def __init__(self, client_name="NTOverAOA", registry=None, on_log=None):
         self.client_name = client_name
 
         if registry is None:
@@ -31,11 +31,14 @@ class NTHandler:
         else:
             self.registry = registry
 
+        self.on_log = on_log or (lambda _message: None)
+
         self.inst = None
         self.poller = None
         self.ip = None
         self.connected = False
         self._subscribers = {}
+        self._publishers = {}
 
     def is_connected(self):
         if not self.connected:
@@ -106,7 +109,48 @@ class NTHandler:
         if self.inst is None:
             return False
 
-        self.inst.getTable("").putValue(key, value)
+        try:
+            schema = msg.get("schema")
+            if schema is not None:
+                return self._put_struct(key, value, schema)
+            self.inst.getTable("").putValue(key, value)
+            return True
+        except Exception as error:  # noqa: BLE001 - one bad put must not stop the bridge
+            self.on_log(f"Put failed for {key}: {error}")
+            return False
+
+    def _put_struct(self, key, value, schema):
+        if self.inst is None:
+            return False
+
+        name = struct_name(schema)
+        if name is None:
+            raise ValueError("schema must start with 'struct <Name> {'")
+
+        names = self.registry.register(name, schema)
+        if not names:
+            raise ValueError(f"could not parse schema: {schema}")
+
+        suffix = "[]" if isinstance(value, list) else ""
+        data = self.registry.encode_type(f"{name}{suffix}", value)
+
+        if names:
+            for schema_name in names:
+                schema_text = self.registry.get_schema(schema_name)
+                if schema_text is None:
+                    continue
+                topic = f"{key}/.schema/{schema_name}"
+                publisher = self._publishers.get(topic)
+                if publisher is None:
+                    publisher = self.inst.getTopic(topic).genericPublish("string")
+                    self._publishers[topic] = publisher
+                publisher.setString(schema_text)
+
+        publisher = self._publishers.get(key)
+        if publisher is None or publisher.getTopic().getName() != key:
+            publisher = self.inst.getTopic(key).genericPublish(f"struct:{name}{suffix}")
+            self._publishers[key] = publisher
+        publisher.setRaw(data)
 
         return True
 
@@ -136,7 +180,6 @@ class NTHandler:
 
         msg = {
             "key": key,
-            "type": type_str,
             "time": data.value.time() / 1_000_000.0,
         }
 
@@ -165,7 +208,8 @@ class NTHandler:
             name = key.split(marker, 1)[1]
 
             schema = event.data.value.value()
-            schema = schema.decode("utf-8", "replace")
+            if isinstance(schema, bytes):
+                schema = schema.decode("utf-8", "replace")
             self.registry.register(name, schema)
 
             return None
@@ -253,7 +297,6 @@ class NTHandler:
 
                 msg = {
                     "key": key,
-                    "type": type_str,
                     "time": value.time() / 1_000_000.0,
                 }
 

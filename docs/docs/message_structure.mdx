@@ -25,8 +25,11 @@ this will be what we will use going forward as it provides more flexibility
 When the android app wants to send data back like to run an action, the message will look like
 
 ```json
-{"action":"put", "key":"/smartdashboard/foo", "value": 42}
+{"action":"put", "key":"/RouteRoute/foo", "value": 42}
+// When using structs
+{"action":"put", "key":"/RoboRoute/bar", "schema":"struct Pose2d {...}", "value":{...}}
 ```
+See [Struct Schemas](#structs) for more information on writing a schema
 
 ## NTOverAOA -> Android Device
 
@@ -39,11 +42,12 @@ Sometimes it is useful to know all of the currently available topics from Networ
 ### Receiving a value
 A value from network tables will look like this over AOA
 
-```jsonc
-{"key":"/robot/pose","type":"Double","time":1234.5678,"value":42}
+```json
+{"key":"/robot/pose","time":1234.5678,"value":42}
 // When using structs
-{"key":"/robot/pose","type":"Pose2d","time":1234.5678,"schema":"struct Pose2d {...}","value":{...}}
+{"key":"/robot/pose","time":1234.5678,"schema":"struct Pose2d {...}","value":{...}}
 ```
+See [Struct Schemas](#structs) for more information on writing a schema
 
 Decoded struct value example, decoded to match the struct schema
 
@@ -55,11 +59,11 @@ The data to and from NetworkTables is split into two topics (Run, Data) for each
 
 All NetworkTables entries are under the `RoboRoute` table, to for example pathfind to a pose, we would first set the data topic
 ```json
-{"action":"put", "key":"/RoboRoute/Pose", "value": 42}
+{"action":"put", "key":"/RoboRoute/Pose", "schema":"struct Pose2d {...}", "value":{...}}
 ```
 
 Then we would set the `RunPose` topic true for ~1 second, then set it false
-```jsonc
+```json
 {"action":"put", "key":"/RoboRoute/RunPose", "value": true}
 // ~1 second later
 {"action":"put", "key":"/RoboRoute/RunPose", "value": false}
@@ -69,3 +73,14 @@ We can repeat these steps for the Route and Path action types
 - Pose - Pose2d
 - Path - String
 - Route - Pose2d[]
+
+## Structs
+When using a struct for either sending or receiving, there is a schema that is attached, this is an example for a Pose2d
+
+```json
+// Example Struct Schema
+"struct Pose2d {struct Translation2d {double x; double y;} translation; struct Rotation2d {double value;} rotation;}"
+// A value would look like this
+{"translation":{"x":1.5,"y":-2.25},"rotation":{"value":0.1234}}
+```
+To supply an array of structs, the schema is the same but the values are supplied as an array `[]`
