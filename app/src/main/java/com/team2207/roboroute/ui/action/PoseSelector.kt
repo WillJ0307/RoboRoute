@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +47,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.team2207.roboroute.R
+import com.team2207.roboroute.serial.RobotPoseManager
 import com.team2207.roboroute.ui.components.FullScreenImage
+import com.team2207.roboroute.ui.theme.BlueAlliance
+import com.team2207.roboroute.ui.theme.RedAlliance
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
 import kotlin.math.atan2
@@ -208,7 +212,8 @@ fun RobotVisual(
     val extensionLength = 40.dp
     val dotSize = 16.dp
     val strokeWidth = 2.dp
-    val primaryColor = returnPrimaryColor()
+    val isRedAlliance by RobotPoseManager.isRedAlliance.collectAsState()
+    val primaryColor = if (isRedAlliance) RedAlliance else BlueAlliance
 
     // Total height of drawing including control extension if shown
     val drawingHeight = if (showControls) (dotSize / 2) + extensionLength + robotLength else robotLength

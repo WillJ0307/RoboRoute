@@ -99,13 +99,14 @@ fun MainView(
             val fitWidthDp = (imgSize.width * scale / density).dp
             val fitHeightDp = (imgSize.height * scale / density).dp
 
-            val fieldRotation = if (isRedAlliance) 0f else 180f
+            val isFlipped = isRedAlliance
+            val flipAngle = if (isFlipped) 180f else 0f
 
             Box(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .graphicsLayer { rotationZ = fieldRotation },
+                        .graphicsLayer { rotationZ = flipAngle },
             ) {
                 FullScreenImage(
                     modifier = Modifier.fillMaxSize(),
@@ -116,12 +117,11 @@ fun MainView(
                 modifier =
                     Modifier
                         .size(fitWidthDp, fitHeightDp)
-                        .align(Alignment.Center)
-                        .graphicsLayer { rotationZ = fieldRotation },
+                        .align(Alignment.Center),
             ) {
                 if (isPoseValid) {
-                    val xMeter = livePose.x
-                    val yMeter = livePose.y
+                    val xMeter = if (isFlipped) FIELD_WIDTH_METERS - livePose.x else livePose.x
+                    val yMeter = if (isFlipped) FIELD_HEIGHT_METERS - livePose.y else livePose.y
 
                     val xOffsetDp = -(xMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
                     val yOffsetDp = -(yMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
@@ -135,7 +135,10 @@ fun MainView(
                                 .align(Alignment.BottomEnd)
                                 .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
                                 .graphicsLayer {
-                                    rotationZ = Math.toDegrees(livePose.rotation).toFloat()
+                                    rotationZ =
+                                        Math.toDegrees(
+                                            livePose.rotation + (if (isFlipped) Math.PI else 0.0),
+                                        ).toFloat()
                                 },
                         showControls = false,
                         robotWidth = robotWidthDp,
@@ -156,7 +159,7 @@ fun MainView(
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx,
-                            fieldRotation = fieldRotation,
+                            flipped = isFlipped,
                         )
                     }
                 }
@@ -247,22 +250,27 @@ fun CircularButton(
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
     maxHeight: Float,
-    fieldRotation: Float,
+    flipped: Boolean,
 ) {
     var showActionDialog by remember { mutableStateOf(false) }
     val assignedAction = actions.find { it.id == button.actionId }
     val currentActionId by rememberUpdatedState(button.actionId)
     val density = LocalDensity.current
 
-    var localX by remember { mutableStateOf(button.x) }
-    var localY by remember { mutableStateOf(button.y) }
+    // Stored coords are always in the "unflipped" reference frame. When the field is
+    // flipped the button is mirrored onto the screen and mirrored back before saving.
+    val toDisplay = { v: Float -> if (flipped) 1f - v else v }
+    val toRaw = { v: Float -> if (flipped) 1f - v else v }
+
+    var localX by remember { mutableStateOf(toDisplay(button.x)) }
+    var localY by remember { mutableStateOf(toDisplay(button.y)) }
     var localRadius by remember { mutableStateOf(button.radius) }
     var isInteracting by remember { mutableStateOf(false) }
 
     LaunchedEffect(button.x, button.y, button.radius, isInteracting) {
         if (!isInteracting) {
-            localX = button.x
-            localY = button.y
+            localX = toDisplay(button.x)
+            localY = toDisplay(button.y)
             localRadius = button.radius
         }
     }
@@ -303,7 +311,7 @@ fun CircularButton(
                                 change.consume()
                                 localX = (localX + dragAmount.x / maxWidth).coerceIn(0f, 1f)
                                 localY = (localY + dragAmount.y / maxHeight).coerceIn(0f, 1f)
-                                onUpdate(localX, localY, localRadius, currentActionId)
+                                onUpdate(toRaw(localX), toRaw(localY), localRadius, currentActionId)
                             }
                         }
                     }.clickable {
@@ -320,7 +328,6 @@ fun CircularButton(
                 color = Color.White,
                 fontSize = with(density) { (localRadius / 3).toSp() },
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.graphicsLayer { rotationZ = -fieldRotation },
             )
         }
 
@@ -348,7 +355,7 @@ fun CircularButton(
                                     val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
                                     val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
                                     localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
-                                    onUpdate(localX, localY, localRadius, currentActionId)
+                                    onUpdate(toRaw(localX), toRaw(localY), localRadius, currentActionId)
                                 }
                             },
                 )

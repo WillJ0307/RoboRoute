@@ -30,8 +30,11 @@ class SubscriptionState:
             for key in normalized:
                 self._info.setdefault(key, {"value": "", "time": None})
 
-            if new_keys:
-                self._pending_initial.extend(new_keys)
+            # Subscription state stays the same for keys already subscribed, but the current
+            # value is always re-requested so a repeat subscribe (e.g. a periodic refresh)
+            # causes the host to resend it.
+            if normalized:
+                self._pending_initial.extend(normalized)
 
             return new_keys
 
