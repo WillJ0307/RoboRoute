@@ -1,6 +1,8 @@
 ---
 title: Message Structure
+sidebar_position: 4
 ---
+## AOA Messages
 
 ## Android Device -> NTOverAOA
 
@@ -37,16 +39,33 @@ Sometimes it is useful to know all of the currently available topics from Networ
 ### Receiving a value
 A value from network tables will look like this over AOA
 
-```json
+```jsonc
 {"key":"/robot/pose","type":"Double","time":1234.5678,"value":42}
-```
-
-When using structs
-```json
+// When using structs
 {"key":"/robot/pose","type":"Pose2d","time":1234.5678,"schema":"struct Pose2d {...}","value":{...}}
 ```
+
 Decoded struct value example, decoded to match the struct schema
 
 ```json
 {"translation":{"x":..,"y":..}, "rotation": {...}}
 ```
+## NetworkTables Actions Structure
+The data to and from NetworkTables is split into two topics (Run, Data) for each action type (Pose, Route, Path)
+
+All NetworkTables entries are under the `RoboRoute` table, to for example pathfind to a pose, we would first set the data topic
+```json
+{"action":"put", "key":"/RoboRoute/Pose", "value": 42}
+```
+
+Then we would set the `RunPose` topic true for ~1 second, then set it false
+```jsonc
+{"action":"put", "key":"/RoboRoute/RunPose", "value": true}
+// ~1 second later
+{"action":"put", "key":"/RoboRoute/RunPose", "value": false}
+```
+We can repeat these steps for the Route and Path action types
+
+- Pose - Pose2d
+- Path - String
+- Route - Pose2d[]
