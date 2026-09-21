@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -46,9 +47,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,9 +77,17 @@ fun SettingsView(
 ) {
     val appData by viewModel.appData.collectAsState()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
-    // Local state to avoid cursor jumping
-    var localNtPath by remember(appData.ntPath) { mutableStateOf(appData.ntPath) }
+    // Local state to avoid cursor jumping. Prefilled from the saved value and kept in sync
+    // whenever the saved value changes externally, but never while the field is being edited.
+    var localNtPath by remember { mutableStateOf(appData.ntPath) }
+    var ntPathFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(appData.ntPath) {
+        if (!ntPathFocused) {
+            localNtPath = appData.ntPath
+        }
+    }
     var localWidth by remember(appData.robotWidth) { mutableStateOf(appData.robotWidth.toString()) }
     var localLength by remember(appData.robotLength) { mutableStateOf(appData.robotLength.toString()) }
 
@@ -182,13 +194,22 @@ fun SettingsView(
             ) {
                 OutlinedTextField(
                     value = localNtPath,
-                    onValueChange = {
-                        localNtPath = it
-                        viewModel.updateNtPath(it)
-                    },
+                    onValueChange = { localNtPath = it },
                     label = { Text("NetworkTables Robot Pose Path") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                ntPathFocused = focusState.isFocused
+                                // Commit once the field is clicked off of or the keyboard is dismissed,
+                                // so the subscribe request only fires when the path is final.
+                                if (!focusState.isFocused && localNtPath != appData.ntPath) {
+                                    viewModel.updateNtPath(localNtPath)
+                                }
+                            },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 )
 
                 Spacer(modifier = Modifier.padding(4.dp))
