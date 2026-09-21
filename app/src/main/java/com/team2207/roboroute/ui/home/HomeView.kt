@@ -136,9 +136,10 @@ fun MainView(
                                 .offset(yOffsetDp + (robotWidthDp / 2), xOffsetDp + (robotLengthDp / 2))
                                 .graphicsLayer {
                                     rotationZ =
-                                        Math.toDegrees(
-                                            livePose.rotation + (if (isFlipped) Math.PI else 0.0),
-                                        ).toFloat()
+                                        Math
+                                            .toDegrees(
+                                                livePose.rotation + (if (isFlipped) Math.PI else 0.0),
+                                            ).toFloat()
                                 },
                         showControls = false,
                         robotWidth = robotWidthDp,
