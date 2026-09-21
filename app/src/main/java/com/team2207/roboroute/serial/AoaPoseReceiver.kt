@@ -198,17 +198,6 @@ class AoaPoseReceiver(
                 }
             }
         }
-
-        // Periodic Alliance check (every minute)
-        scope.launch {
-            while (true) {
-                delay(60000)
-                if (outputStream != null) {
-                    SerialLogManager.addLog("AOA: Periodic Alliance check...")
-                    subscribe(ALLIANCE_PATH)
-                }
-            }
-        }
     }
 
     fun handleIntent(intent: Intent) {
