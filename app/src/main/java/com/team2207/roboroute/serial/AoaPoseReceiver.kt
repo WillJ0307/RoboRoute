@@ -239,14 +239,17 @@ class AoaPoseReceiver(
         }
     }
 
-    fun putValue(key: String, value: Any) {
+    fun putValue(key: String, value: Any, schema: String? = null) {
         val stream = outputStream ?: return // Ensuring that the AOA connection is active
 
-        val message = mapOf( // Making the data structure for the put message
+        val message = mutableMapOf( // Making the data structure for the put message
             "action" to "put",
             "key" to key,
             "value" to value
         )
+        if (schema != null) {
+            message["schema"] = schema
+        }
 
         val json = gson.toJson(message) + "\n" // Adding the newline so that it doesn't get mad
 
@@ -271,7 +274,8 @@ class AoaPoseReceiver(
                 "value" to pose.rotation
             )
         )
-        putValue(key = "/RoboRoute/Pose", value = poseMap) // Using the putValue fun to send the pose
+        val schema = "struct Pose2d {struct Translation2d {double x; double y;} translation; struct Rotation2d {double value;} rotation;}"
+        putValue(key = "/RoboRoute/Pose", value = poseMap, schema = schema) // Using the putValue fun to send the pose
         putValue(key = "/RoboRoute/RunPose", value = true) // Enabling trigger to tell robot to run
         delay(1000)
         putValue(key = "/RoboRoute/RunPose", value = false) // Disabling trigger so it doesn't loop
