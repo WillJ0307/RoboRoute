@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -50,6 +51,7 @@ import com.team2207.roboroute.R
 import com.team2207.roboroute.serial.RobotPoseManager
 import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.theme.BlueAlliance
+import com.team2207.roboroute.ui.theme.Orange
 import com.team2207.roboroute.ui.theme.RedAlliance
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
@@ -246,28 +248,53 @@ fun RobotVisual(
         val squareTopY = if (showControls) dotRadiusPx + extensionPx else 0f
         val centerY = squareTopY + (robotLengthPx / 2f)
 
+        // Rounded body with a dark fill and a thick bumper border. In the pose selector
+        // the outline switches to orange and the heading arrow is hidden.
+        val borderColor = if (showControls) Orange else primaryColor
         drawRoundRect(
-            color = primaryColor,
+            color = Color(0xFF222222),
             topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
             size = Size(robotWidthPx, robotLengthPx),
-            cornerRadius = CornerRadius(8.dp.toPx()),
-            style = Stroke(width = strokeWidthPx),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+        )
+        drawRoundRect(
+            color = borderColor,
+            topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
+            size = Size(robotWidthPx, robotLengthPx),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+            style = Stroke(width = strokeWidthPx * 1.5f),
         )
 
-        val arrowPath =
-            Path().apply {
-                val arrowWidth = robotWidthPx * 0.5f
-                val arrowHeight = robotLengthPx * 0.3f
-                moveTo(centerX, squareTopY)
-                lineTo(centerX - arrowWidth / 2f, squareTopY + arrowHeight)
-                lineTo(centerX + arrowWidth / 2f, squareTopY + arrowHeight)
-                close()
-            }
-        drawPath(path = arrowPath, color = primaryColor.copy(alpha = 0.7f))
+        if (!showControls) {
+            // AdvantagesScope heading arrow: a white center shaft running from halfway
+            // behind the centre to halfway in front, with an open (unfilled) V head.
+            val arrowBackY = centerY + robotLengthPx * 0.3f
+            val arrowTipY = centerY - robotLengthPx * 0.3f
+            val armHalf = robotLengthPx * 0.15f
+            val armBaseY = arrowTipY + armHalf
+            val arrowPath =
+                Path().apply {
+                    moveTo(centerX, arrowBackY)
+                    lineTo(centerX, arrowTipY)
+                    lineTo(centerX - armHalf, armBaseY)
+                    moveTo(centerX, arrowTipY)
+                    lineTo(centerX + armHalf, armBaseY)
+                }
+            drawPath(
+                path = arrowPath,
+                color = Color.White,
+                style =
+                    Stroke(
+                        width = strokeWidthPx,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    ),
+            )
+        }
 
         if (showControls) {
             drawLine(
-                color = primaryColor,
+                color = Orange,
                 start = Offset(centerX, centerY),
                 end = Offset(centerX, dotRadiusPx),
                 strokeWidth = strokeWidthPx,
@@ -288,7 +315,6 @@ fun RobotPoseEdit(
 ) {
     val extensionLength = 40.dp
     val dotSize = 16.dp
-    val primaryColor = returnPrimaryColor()
 
     // Rotation pivot is the handle box centre, which is also the robot's centre (same anchor
     // as the main view). The rotate handle orbits at the END of the heading line (coincident
@@ -377,7 +403,7 @@ fun RobotPoseEdit(
                 Modifier
                     .size(dotSize)
                     .clip(CircleShape)
-                    .background(primaryColor),
+                    .background(Orange),
         )
 
         val angleRadForHandle = localRotation.toDouble() - (Math.PI / 2.0)
@@ -390,7 +416,7 @@ fun RobotPoseEdit(
                     .offset(x = dotOffsetX, y = dotOffsetY)
                     .size(dotSize)
                     .clip(CircleShape)
-                    .background(primaryColor),
+                    .background(Orange),
         )
     }
 }

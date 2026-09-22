@@ -1,5 +1,6 @@
 package com.team2207.roboroute.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,6 +68,7 @@ import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.settings.ActionEditorSheet
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import com.team2207.roboroute.datastore.Pose2d as ProtoPose2d
@@ -87,6 +89,11 @@ fun MainView(
     val isPoseValid by viewModel.isPoseValid.collectAsState()
     val isRedAlliance by viewModel.isRedAlliance.collectAsState()
     val isAoaConnected by viewModel.isAoaConnected.collectAsState()
+
+    // Absorb back on the root screen so an accidental left/right edge swipe can't close
+    // the app. The bottom/home gesture still works. Dialogs and sheets register their own
+    // back handlers, which take priority while visible, so they still dismiss normally.
+    BackHandler {}
 
     var draftPose by remember { mutableStateOf<UIAction.PoseSelection?>(null) }
     // rememberSaveable so the edited action survives navigating to the pose selector and back.
@@ -386,7 +393,10 @@ fun CircularButton(
     var localRadius by remember { mutableStateOf(button.radius) }
     var isInteracting by remember { mutableStateOf(false) }
 
-    LaunchedEffect(button.x, button.y, button.radius, isInteracting) {
+    // Not keyed on isInteracting: on release the last commit flowing back already matches
+    // the dragged state, so re-syncing then would snap the button back to a stale value
+    // (the "bounce"). External changes are still picked up whenever not interacting.
+    LaunchedEffect(button.x, button.y, button.radius) {
         if (!isInteracting) {
             localX = toDisplay(button.x)
             localY = toDisplay(button.y)
@@ -452,14 +462,32 @@ fun CircularButton(
         }
 
         if (isEditing) {
-            // Resize handles in corners
+            // Resize handles centered on the bounding square's corners. Sized relative to the
+            // button radius so they clear the circle's outline instead of sitting on its line.
+            val handleSize =
+                with(density) {
+                    (max(14f, min(localRadius * 0.45f, 26f))).toDp()
+                }
+            val handleOffset = handleSize / 2f
             listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd).forEach { alignment ->
                 Box(
                     modifier =
                         Modifier
                             .align(alignment)
-                            .size(28.dp)
-                            .padding(4.dp)
+                            .offset(
+                                x =
+                                    if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) {
+                                        -handleOffset
+                                    } else {
+                                        handleOffset
+                                    },
+                                y =
+                                    if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) {
+                                        -handleOffset
+                                    } else {
+                                        handleOffset
+                                    },
+                            ).size(handleSize)
                             .clip(CircleShape)
                             .background(secondaryColor)
                             .border(1.dp, primaryColor, CircleShape)
@@ -470,10 +498,17 @@ fun CircularButton(
                                     onDragCancel = { isInteracting = false },
                                 ) { change, dragAmount ->
                                     change.consume()
-                                    // Corner-aware resizing
+                                    // Corner-aware resizing. Track the dominant drag axis at
+                                    // full speed so the handle stays locked to the square's
+                                    // corner instead of sliding along the circle's diagonal.
                                     val factorX = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) -1 else 1
                                     val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
-                                    val deltaRadius = (dragAmount.x * factorX + dragAmount.y * factorY) / 2f
+                                    val deltaRadius =
+                                        if (Math.abs(dragAmount.x) > Math.abs(dragAmount.y)) {
+                                            dragAmount.x * factorX
+                                        } else {
+                                            dragAmount.y * factorY
+                                        }
                                     localRadius = (localRadius + deltaRadius).coerceIn(40f, 600f)
                                     onUpdate(toRaw(localX), toRaw(localY), localRadius, currentActionId)
                                 }
