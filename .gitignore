@@ -13,3 +13,5 @@
 .cxx
 local.properties
 .gradle
+nt.json
+networktables.json

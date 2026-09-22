@@ -27,25 +27,25 @@ jobs:
 
     steps:
       - name: Download APK
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: android-debug-apk
           path: bundles/apk
 
       - name: Download Linux x86_64 executable
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: NTOverAOA-linux-x86_64
           path: bundles/linux-x86_64
 
       - name: Download Linux ARM64 executable
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: NTOverAOA-linux-arm64
           path: bundles/linux-arm64
 
       - name: Download Windows executable
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: NTOverAOA-windows-x86_64
           path: bundles/windows
@@ -88,7 +88,7 @@ jobs:
           ls -la packages
 
       - name: Upload bundles
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: RoboRoute-bundles
           path: packages/*

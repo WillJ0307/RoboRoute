@@ -95,7 +95,7 @@ class AoaPoseReceiver(
             private set
 
         private const val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
-        private const val ALLIANCE_PATH = "FMSInfo/isRedAlliance"
+        private const val ALLIANCE_PATH = "FMSInfo/IsRedAlliance"
         private const val POSE_PUBLISH_INTERVAL_MS = 33L
         private const val NEWLINE_BYTE = '\n'.code.toByte()
         private const val MAX_LINE_BYTES = 1 shl 22
@@ -205,7 +205,10 @@ class AoaPoseReceiver(
             }
         }
 
-        // Periodic Alliance check (every minute)
+        // Periodic alliance check (every minute): the alliance side is published only rarely
+        // (e.g. once at match start) and does not update often enough to stream a fresh value
+        // on its own, causing it to not send. Re-subscribing periodically forces the host to
+        // resend the current value.
         scope.launch {
             while (true) {
                 delay(60000)
@@ -417,9 +420,9 @@ class AoaPoseReceiver(
 
             // Initial subscriptions
             scope.launch {
+                subscribe(ALLIANCE_PATH)
                 delay(1000)
                 if (currentNtPath.isNotEmpty()) subscribe(currentNtPath)
-                subscribe(ALLIANCE_PATH)
             }
         } else {
             SerialLogManager.addLog("AOA: Error - Failed to open accessory descriptor")

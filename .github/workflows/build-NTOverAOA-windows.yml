@@ -129,7 +129,7 @@ jobs:
             run.py
 
       - name: Upload executable
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: NTOverAOA-windows-x86_64
           path: NTOverAOA/dist/NTOverAOA.exe
