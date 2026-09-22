@@ -119,7 +119,7 @@ class TKApp:
         row = ttk.Frame(conn)
         row.pack(fill=tk.X, pady=2)
 
-        ttk.Label(row, text="Robot IP Source:", width=12).pack(side=tk.LEFT)
+        ttk.Label(row, text="Robot IP Source:", width=16).pack(side=tk.LEFT)
 
         self.ip_mode_combo = ttk.Combobox(
             row,
@@ -174,6 +174,7 @@ class TKApp:
                 width=14,
                 height=14,
                 highlightthickness=0,
+                bg=self.style.lookup("TFrame", "background") or self.root.cget("background"),
             )
             indicator.pack(side=tk.LEFT, padx=(2, 6))
             dot = indicator.create_oval(
@@ -201,6 +202,12 @@ class TKApp:
         log_frame = ttk.LabelFrame(conn_tab, text="Log", padding="4")
         log_frame.pack(fill=tk.BOTH, expand=True)
 
+        log_header = ttk.Frame(log_frame)
+        log_header.pack(fill=tk.X, pady=(0, 2))
+
+        self.copy_status = ttk.Label(log_header, text="", anchor=tk.W)
+        self.copy_status.pack(side=tk.LEFT)
+
         self.log_text = tk.Text(
             log_frame,
             height=10,
@@ -208,6 +215,8 @@ class TKApp:
             wrap=tk.WORD,
             font=("Consolas", 9),
         )
+        self.log_text.bind("<Control-KeyPress-c>", self._copy_selection)
+        self.log_text.bind("<Control-KeyPress-C>", self._copy_selection)
         sb = ttk.Scrollbar(
             log_frame,
             orient=tk.VERTICAL,
@@ -290,6 +299,8 @@ class TKApp:
             activestyle="none",
         )
         self.sub_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.sub_listbox.bind("<Control-KeyPress-c>", self._copy_selection)
+        self.sub_listbox.bind("<Control-KeyPress-C>", self._copy_selection)
 
         sub_sb = ttk.Scrollbar(
             sub_list,
@@ -537,6 +548,28 @@ class TKApp:
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
 
+    def _copy_selection(self, event=None):
+        try:
+            selection = event.widget.selection_get()
+        except tk.TclError:
+            selection = None
+
+        if selection:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selection)
+            self._flash_copy_feedback(f"Copied {len(selection)} chars")
+
+        return "break"
+
+    def _flash_copy_feedback(self, message):
+        self.copy_status.config(text=message)
+        if hasattr(self, "_copy_feedback_job") and self._copy_feedback_job is not None:
+            self.root.after_cancel(self._copy_feedback_job)
+        self._copy_feedback_job = self.root.after(
+            2000,
+            lambda: self.copy_status.config(text=""),
+        )
+
     def _set_connection_state(self, name, state):
         if not isinstance(state, ConnectionState):
             raise TypeError(f"Unknown {name} connection state: {state}")
@@ -654,7 +687,7 @@ class TKApp:
         self.connected = False
         self._connecting = True
 
-        self.connect_btn.config(text="Connecting...")
+        self.connect_btn.config(text="Cancel")
         self.bridge.start(ip, (match[0], match[1]))
 
     def _disconnect(self):

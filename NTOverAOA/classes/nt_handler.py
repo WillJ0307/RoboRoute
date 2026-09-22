@@ -49,7 +49,7 @@ class NTHandler:
 
         return self.inst.isConnected()
 
-    def connect(self, ip, timeout=10.0, client_name=None):
+    def connect(self, ip, timeout=10.0, client_name=None, stop_event=None):
         self.ip = ip
 
         if client_name is not None:
@@ -65,6 +65,10 @@ class NTHandler:
         start_time = time.monotonic()
 
         while not self.inst.isConnected():
+            if stop_event is not None and stop_event.is_set():
+                self.disconnect()
+                raise RuntimeError(f"Connection to {ip} cancelled")
+
             if time.monotonic() - start_time > timeout:
                 raise TimeoutError(f"Connection to {ip} timed out")
 

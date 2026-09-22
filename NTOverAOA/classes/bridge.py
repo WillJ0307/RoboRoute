@@ -56,7 +56,7 @@ class NTOverUSBBridge:
         try:
             self.usb.connect(vidpid)
             self._state("usb", "connected")
-            self.nt.connect(ip, timeout=10)
+            self.nt.connect(ip, timeout=10, stop_event=self._stop)
             self._state("nt", "connected")
             self._send_topic_listing()
             self._last_topic_send = time.monotonic()
