@@ -161,6 +161,7 @@ fun MainView(
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx,
                             fieldRotation = fieldRotation,
+                            onExecute = { action -> viewModel.executeAction(action) }
                         )
                     }
                 }
@@ -252,6 +253,7 @@ fun CircularButton(
     maxWidth: Float,
     maxHeight: Float,
     fieldRotation: Float,
+    onExecute: (com.team2207.roboroute.datastore.Action) -> Unit,
 ) {
     var showActionDialog by remember { mutableStateOf(false) }
     val assignedAction = actions.find { it.id == button.actionId }
@@ -315,6 +317,7 @@ fun CircularButton(
                             showActionDialog = true
                         } else {
                             println("Executing action: ${assignedAction?.name}")
+                            assignedAction?.let { onExecute(it) }
                         }
                     },
             contentAlignment = Alignment.Center,
