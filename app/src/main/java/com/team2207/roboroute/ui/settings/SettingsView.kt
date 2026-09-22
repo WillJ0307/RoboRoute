@@ -73,6 +73,7 @@ fun SettingsView(
     onEditPose: (Double, Double, Double, Double, Double) -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier,
+    requestedEditActionId: Int? = null,
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val appData by viewModel.appData.collectAsState()
@@ -132,6 +133,18 @@ fun SettingsView(
         ) { uri ->
             uri?.let { viewModel.importData(context, it) }
         }
+
+    var pendingNavEdit by remember(requestedEditActionId) { mutableStateOf(requestedEditActionId) }
+
+    LaunchedEffect(pendingNavEdit, appData.actionsList) {
+        val id = pendingNavEdit
+        if (id != null && appData.actionsList.any { it.id == id }) {
+            editingActionId = id
+            draftPose = null
+            showSheet = true
+            pendingNavEdit = null
+        }
+    }
 
     LaunchedEffect(navController.currentBackStackEntry) {
         val savedState = navController.currentBackStackEntry?.savedStateHandle

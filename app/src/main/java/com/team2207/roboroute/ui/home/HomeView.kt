@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,20 +56,27 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.team2207.roboroute.R
 import com.team2207.roboroute.datastore.ActionType
 import com.team2207.roboroute.datastore.CustomButton
 import com.team2207.roboroute.ui.action.FIELD_HEIGHT_METERS
+import com.team2207.roboroute.ui.action.FIELD_WIDTH_METERS
 import com.team2207.roboroute.ui.action.RobotVisual
 import com.team2207.roboroute.ui.components.FullScreenImage
+import com.team2207.roboroute.ui.settings.ActionEditorSheet
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
 import kotlin.math.min
 import kotlin.math.roundToInt
+import com.team2207.roboroute.datastore.Pose2d as ProtoPose2d
+import com.team2207.roboroute.ui.action.Action as UIAction
 
 @Composable
 fun MainView(
     onNavigateToSettings: () -> Unit,
+    onEditPose: (Double, Double, Double, Double, Double) -> Unit,
+    navController: NavController,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -78,6 +87,47 @@ fun MainView(
     val isPoseValid by viewModel.isPoseValid.collectAsState()
     val isRedAlliance by viewModel.isRedAlliance.collectAsState()
     val isAoaConnected by viewModel.isAoaConnected.collectAsState()
+
+    var draftPose by remember { mutableStateOf<UIAction.PoseSelection?>(null) }
+    // rememberSaveable so the edited action survives navigating to the pose selector and back.
+    var editingActionId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var showEditSheet by remember { mutableStateOf(false) }
+
+    val editingAction: UIAction? =
+        editingActionId?.let { id ->
+            appData.actionsList
+                .firstOrNull { it.id == id }
+                ?.let { action ->
+                    when (action.actionType) {
+                        ActionType.PATHPLANNER ->
+                            UIAction.PathPlanner(action.id, action.name, action.pathName)
+                        ActionType.POSE ->
+                            UIAction.PoseSelection(
+                                action.id,
+                                action.name,
+                                action.pose.x,
+                                action.pose.y,
+                                action.pose.rotation,
+                            )
+                        else -> null
+                    }
+                }
+        }
+
+    LaunchedEffect(navController.currentBackStackEntry) {
+        val savedState = navController.currentBackStackEntry?.savedStateHandle
+        val x = savedState?.get<Double>("pose_x")
+        val y = savedState?.get<Double>("pose_y")
+        val r = savedState?.get<Double>("pose_r")
+
+        if (x != null && y != null && r != null) {
+            draftPose = UIAction.PoseSelection(id = editingActionId ?: 0, name = "", x = x, y = y, r = r)
+            showEditSheet = true
+            savedState.remove<Double>("pose_x")
+            savedState.remove<Double>("pose_y")
+            savedState.remove<Double>("pose_r")
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -97,13 +147,16 @@ fun MainView(
             val density = LocalDensity.current.density
             val fitWidthDp = (imgSize.width * scale / density).dp
             val fitHeightDp = (imgSize.height * scale / density).dp
+            val fitWidthPx = imgSize.width * scale
             val fitHeightPx = imgSize.height * scale
 
             val isFlipped = isRedAlliance
             val flipAngle = if (isFlipped) 180f else 0f
 
-            // Pixels per meter should be consistent.
-            val pxPerMeter = fitHeightPx / FIELD_HEIGHT_METERS
+            // Separate px-per-meter per axis so coordinates map onto the drawn image exactly.
+            // Portrait image: field X (long, 16.54175 m) runs vertically, field Y (short, 8.0137 m) horizontally.
+            val pxPerMeterX = fitHeightPx / FIELD_WIDTH_METERS
+            val pxPerMeterY = fitWidthPx / FIELD_HEIGHT_METERS
 
             Box(
                 modifier =
@@ -126,12 +179,14 @@ fun MainView(
                     val xMeter = if (isFlipped) FIELD_WIDTH_METERS - livePose.x else livePose.x
                     val yMeter = if (isFlipped) FIELD_HEIGHT_METERS - livePose.y else livePose.y
 
-                    // Consistent mapping: X (Short) -> Vertical, Y (Long) -> Horizontal
-                    val xOffsetDp = -(xMeter * pxPerMeter / density).dp
-                    val yOffsetDp = -(yMeter * pxPerMeter / density).dp
+                    // Unflipped, the blue-wall origin (0,0) sits at the bottom-right of the
+                    // portrait image, +X toward the red wall (up), +Y toward the left border.
+                    // X (long) -> Vertical offset, Y (short) -> Horizontal offset.
+                    val xOffsetDp = -(xMeter * pxPerMeterX / density).dp
+                    val yOffsetDp = -(yMeter * pxPerMeterY / density).dp
 
-                    val robotWidthDp = (appData.robotWidth * pxPerMeter / density).dp
-                    val robotLengthDp = (appData.robotLength * pxPerMeter / density).dp
+                    val robotWidthDp = (appData.robotWidth * pxPerMeterY / density).dp
+                    val robotLengthDp = (appData.robotLength * pxPerMeterX / density).dp
 
                     RobotVisual(
                         modifier =
@@ -161,10 +216,14 @@ fun MainView(
                             },
                             onDelete = { viewModel.deleteButton(button.id) },
                             onCreateNewAction = onNavigateToSettings,
+                            onEditAction = { actionId ->
+                                editingActionId = actionId
+                                showEditSheet = true
+                            },
                             actions = appData.actionsList,
                             maxWidth = maxWidthPx,
                             maxHeight = maxHeightPx,
-                            onExecute = { action -> viewModel.executeAction(action) }
+                            onExecute = { action -> viewModel.executeAction(action) },
                             flipped = isFlipped,
                         )
                     }
@@ -217,6 +276,58 @@ fun MainView(
                             .padding(end = 30.dp),
                 )
             }
+
+            ActionEditorSheet(
+                onSaveAction = { uiAction ->
+                    val protoAction =
+                        com.team2207.roboroute.datastore.Action
+                            .newBuilder()
+                            .apply {
+                                name =
+                                    when (uiAction) {
+                                        is UIAction.PathPlanner -> uiAction.name
+                                        is UIAction.PoseSelection -> uiAction.name
+                                    }
+                                when (uiAction) {
+                                    is UIAction.PathPlanner -> {
+                                        actionType = ActionType.PATHPLANNER
+                                        pathName = uiAction.pathName
+                                    }
+                                    is UIAction.PoseSelection -> {
+                                        actionType = ActionType.POSE
+                                        pose =
+                                            ProtoPose2d
+                                                .newBuilder()
+                                                .apply {
+                                                    x = uiAction.x
+                                                    y = uiAction.y
+                                                    rotation = uiAction.r
+                                                }.build()
+                                    }
+                                }
+                                id =
+                                    if (uiAction.actionId != 0) {
+                                        uiAction.actionId
+                                    } else {
+                                        (appData.actionsList.maxOfOrNull { it.id } ?: 0) + 1
+                                    }
+                            }.build()
+                    viewModel.saveAction(protoAction)
+                    draftPose = null
+                    editingActionId = null
+                },
+                onEditPose = { x, y, r -> onEditPose(x, y, r, appData.robotWidth, appData.robotLength) },
+                showSheetInitial = showEditSheet,
+                onSheetVisibilityChange = { visible ->
+                    showEditSheet = visible
+                    editingActionId = null
+                    if (!visible) {
+                        draftPose = null
+                    }
+                },
+                currentPose = draftPose,
+                initialAction = editingAction,
+            )
         }
     }
 }
@@ -253,6 +364,7 @@ fun CircularButton(
     onUpdate: (Float, Float, Float, Int) -> Unit,
     onDelete: () -> Unit,
     onCreateNewAction: () -> Unit,
+    onEditAction: (Int) -> Unit,
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
     maxHeight: Float,
@@ -398,6 +510,20 @@ fun CircularButton(
                                 ListItem(
                                     headlineContent = { Text(actionLabel) },
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    trailingContent = {
+                                        IconButton(
+                                            onClick = {
+                                                showActionDialog = false
+                                                onEditAction(action.id)
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit ${action.name}",
+                                                tint = returnPrimaryColor(),
+                                            )
+                                        }
+                                    },
                                     modifier =
                                         Modifier.clickable {
                                             onUpdate(button.x, button.y, button.radius, action.id)
