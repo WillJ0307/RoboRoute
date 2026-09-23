@@ -138,6 +138,7 @@ class TKApp:
         )
         self.ip_entry.pack(side=tk.LEFT, padx=(6, 0))
         self.ip_mode_combo.bind("<<ComboboxSelected>>", self._on_ip_mode_selected)
+        self._fix_combobox_highlight(self.ip_mode_combo)
 
         self._update_ip_field()
 
@@ -153,6 +154,7 @@ class TKApp:
             state="readonly",
         )
         self.usb_combo.pack(side=tk.LEFT)
+        self._fix_combobox_highlight(self.usb_combo)
 
         ttk.Button(
             row,
@@ -264,7 +266,7 @@ class TKApp:
         if sys.platform == "win32":
             driver_frame = ttk.LabelFrame(
                 setup_tab,
-                text="Install usb driver",
+                text="Install USB Driver",
                 padding="8",
             )
             driver_frame.pack(fill=tk.X, pady=(0, 8))
@@ -322,8 +324,29 @@ class TKApp:
         self._candidates = candidates
         self.usb_combo["values"] = [candidate[2] for candidate in candidates]
 
-        if candidates and not self.usb_var.get():
+        if candidates:
             self.usb_var.set(candidates[0][2])
+        else:
+            self.usb_var.set("")
+
+    def _fix_combobox_highlight(self, combo: ttk.Combobox) -> None:
+        # On the clam theme the readonly combobox keeps showing the chosen text as
+        # selected (and the popdown keeps its highlight) long after the dropdown
+        # closes. Disable exportselection, drop the popdown's hover "active" styling,
+        # and actively clear the selection whenever the user picks an item or leaves.
+        combo.configure(exportselection=False)
+
+        try:
+            popdown_path = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+            popdown = self.root.nametowidget(popdown_path)
+            for child in popdown.winfo_children():
+                if isinstance(child, tk.Listbox):
+                    child.configure(activestyle="none")
+        except (tk.TclError, KeyError):
+            pass
+
+        combo.bind("<<ComboboxSelected>>", lambda _e: combo.selection_clear())
+        combo.bind("<FocusOut>", lambda _e: combo.selection_clear())
 
     def _available_ip_sources(self):
         if sys.platform == "win32":
