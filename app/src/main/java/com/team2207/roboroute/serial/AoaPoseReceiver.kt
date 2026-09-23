@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -49,9 +50,10 @@ object AoaConnectionState {
 }
 
 class AoaPoseReceiver(
-    private val context: Context,
+    context: Context,
     private val repository: ActionRepository,
 ) {
+    private val context = context.applicationContext
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private var accessory: UsbAccessory? = null
     private var fileDescriptor: ParcelFileDescriptor? = null
@@ -89,6 +91,11 @@ class AoaPoseReceiver(
     private var pendingRotation = 0.0
 
     companion object {
+        @android.annotation.SuppressLint("StaticFieldLeak")
+        @Volatile
+        var instance: AoaPoseReceiver? = null
+            private set
+
         private const val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
         private const val ALLIANCE_PATH = "FMSInfo/IsRedAlliance"
         private const val POSE_PUBLISH_INTERVAL_MS = 33L
@@ -142,6 +149,7 @@ class AoaPoseReceiver(
         }
 
     fun start() {
+        instance = this
         SerialLogManager.addLog("AOA: Receiver instance starting...")
         stopped = false
         val filter =
@@ -236,6 +244,56 @@ class AoaPoseReceiver(
         }
     }
 
+    suspend fun putValue(
+        key: String,
+        value: Any,
+        schema: String? = null,
+    ) {
+        val stream = outputStream ?: return // Ensuring that the AOA connection is active
+
+        val message =
+            mutableMapOf( // Making the data structure for the put message
+                "action" to "put",
+                "key" to key,
+                "value" to value,
+            )
+        if (schema != null) {
+            message["schema"] = schema
+        }
+
+        val json = gson.toJson(message) + "\n" // Adding the newline so that it doesn't get mad
+
+        withContext(Dispatchers.IO) {
+            try {
+                val bytes = json.toByteArray() // Changing to byte array
+                stream.write(bytes) // Writing to the AOA thing with the bytes
+                stream.flush() // Flush makes it send immediately
+            } catch (e: IOException) {
+                SerialLogManager.addLog("AOA: Put Error: ${e.message}") // Logging error if cable disconnects
+            }
+        }
+    }
+
+    suspend fun runPose(pose: com.team2207.roboroute.datastore.Pose2d) { // This long string is the pose2d type
+        val poseMap =
+            mapOf( // Mapping to GSON so it works
+                "translation" to
+                    mapOf(
+                        "x" to pose.x,
+                        "y" to pose.y,
+                    ),
+                "rotation" to
+                    mapOf(
+                        "value" to pose.rotation,
+                    ),
+            )
+        val schema = "struct Pose2d {struct Translation2d {double x; double y;} translation; struct Rotation2d {double value;} rotation;}"
+        putValue(key = "/RoboRoute/Pose", value = poseMap, schema = schema) // Using the putValue fun to send the pose
+        putValue(key = "/RoboRoute/RunPose", value = true) // Enabling trigger to tell robot to run
+        delay(1000)
+        putValue(key = "/RoboRoute/RunPose", value = false) // Disabling trigger so it doesn't loop
+    }
+
     fun subscribe(path: String) {
         SerialLogManager.addLog("AOA: Attempting to subscribe to: $path")
         if (outputStream == null) {
@@ -257,6 +315,7 @@ class AoaPoseReceiver(
     }
 
     fun stop() {
+        instance = null
         stopped = true
         try {
             context.unregisterReceiver(usbReceiver)

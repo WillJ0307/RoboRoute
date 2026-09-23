@@ -59,7 +59,7 @@ class TKApp:
         self.root = root
         self.root.title("NTOverAOA")
         self.root.geometry("560x480")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         app_icon = tk.PhotoImage(file=_resource_path("assets", "logo.png"))

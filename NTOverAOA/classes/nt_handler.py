@@ -118,7 +118,7 @@ class NTHandler:
             schema = msg.get("schema")
             if schema is not None:
                 return self._put_struct(key, value, schema)
-            self.inst.getTable("").putValue(key, value)
+            self.inst.getEntry(key).setValue(value)
             return True
         except Exception as error:  # noqa: BLE001 - one bad put must not stop the bridge
             self.on_log(f"Put failed for {key}: {error}")

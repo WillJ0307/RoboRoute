@@ -1,9 +1,11 @@
 package com.team2207.roboroute.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.team2207.roboroute.ui.action.PoseSelectorMainView
 import com.team2207.roboroute.ui.home.MainView
 import com.team2207.roboroute.ui.settings.SettingsView
@@ -19,13 +21,29 @@ fun AppNavigation() {
     NavHost(navController = navController, startDestination = HOME_SCREEN) {
         // Home Screen Route
         composable(HOME_SCREEN) {
-            MainView(onNavigateToSettings = {
-                navController.navigate(SETTINGS_SCREEN)
-            })
+            MainView(
+                onNavigateToSettings = {
+                    navController.navigate(SETTINGS_SCREEN)
+                },
+                onEditPose = { x, y, r, w, l ->
+                    navController.navigate("$POSE_SELECTOR_SCREEN?x=$x&y=$y&r=$r&w=$w&l=$l")
+                },
+                navController = navController,
+            )
         }
 
-        // Settings Screen Route
-        composable(SETTINGS_SCREEN) {
+        // Settings Screen Route (optionally jumps straight into editing an action)
+        composable(
+            route = "$SETTINGS_SCREEN?editActionId={editActionId}",
+            arguments =
+                listOf(
+                    navArgument("editActionId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    },
+                ),
+        ) { backStackEntry ->
+            val editActionId = backStackEntry.arguments?.getInt("editActionId") ?: -1
             SettingsView(
                 onBack = {
                     navController.popBackStack()
@@ -34,6 +52,7 @@ fun AppNavigation() {
                     navController.navigate("$POSE_SELECTOR_SCREEN?x=$x&y=$y&r=$r&w=$w&l=$l")
                 },
                 navController = navController,
+                requestedEditActionId = editActionId.takeIf { it >= 0 },
             )
         }
 

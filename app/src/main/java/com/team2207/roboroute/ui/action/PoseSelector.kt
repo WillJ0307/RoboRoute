@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -50,18 +51,23 @@ import com.team2207.roboroute.R
 import com.team2207.roboroute.serial.RobotPoseManager
 import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.theme.BlueAlliance
+import com.team2207.roboroute.ui.theme.Orange
 import com.team2207.roboroute.ui.theme.RedAlliance
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-// FRC Field Dimensions (Meters)
-const val FIELD_WIDTH_METERS = 16.541
-const val FIELD_HEIGHT_METERS = 8.211
+// FRC field dimensions (meters). The field image is portrait: the long axis (X) runs
+// vertically and the short axis (Y) horizontally. FRC 2023-2026 "blue wall" convention:
+// origin at the rightmost corner of the blue alliance wall (bottom-right of the portrait
+// image), +X toward the red wall, +Y toward the left side border.
+const val FIELD_WIDTH_METERS = 16.54175
+const val FIELD_HEIGHT_METERS = 8.0137
 
 @Composable
 fun PoseSelectorMainView(
@@ -80,7 +86,10 @@ fun PoseSelectorMainView(
     // Guards against a fast double-tap popping the back stack more than once.
     var isNavigating by remember { mutableStateOf(false) }
 
-    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) { innerPadding ->
         BoxWithConstraints(
             modifier =
                 Modifier
@@ -98,11 +107,21 @@ fun PoseSelectorMainView(
             val fitWidthDp = (imgWidth * scale).dp
             val fitHeightDp = (imgHeight * scale).dp
 
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val fitWidthPx = imgWidth * scale * density.density
+            val fitHeightPx = imgHeight * scale * density.density
+
+            // Pixels per meter, separate per axis so each maps onto the drawn image exactly.
+            val pxPerMeterX = fitHeightPx / FIELD_WIDTH_METERS // X (long) -> vertical pixels
+            val pxPerMeterY = fitWidthPx / FIELD_HEIGHT_METERS // Y (short) -> horizontal pixels
+
             if (!isInitialized) {
-                // Mapping: Bottom-Right is (0,0). Left is +Y, Up is +X.
-                val xPx = -(initialX / FIELD_WIDTH_METERS * fitHeightDp.value)
-                val yPx = -(initialY / FIELD_HEIGHT_METERS * fitWidthDp.value)
-                robotOffset = Offset(yPx.toFloat(), xPx.toFloat())
+                // Pose coordinate maps to the robot's CENTRE. robotOffset is the offset of the
+                // handle box centre from the field box centre; the field origin (bottom-right of
+                // the portrait image) maps via the standard FRC "blue wall" convention.
+                val xPx = -(initialX / FIELD_WIDTH_METERS * fitHeightPx)
+                val yPx = -(initialY / FIELD_HEIGHT_METERS * fitWidthPx)
+                robotOffset = Offset((fitWidthPx / 2f + yPx).toFloat(), (fitHeightPx / 2f + xPx).toFloat())
                 isInitialized = true
             }
 
@@ -132,9 +151,9 @@ fun PoseSelectorMainView(
                 onClick = {
                     if (!isNavigating) {
                         isNavigating = true
-                        val frcX = (-robotOffset.y.dp.value / fitHeightDp.value) * FIELD_WIDTH_METERS
-                        val frcY = (-robotOffset.x.dp.value / fitWidthDp.value) * FIELD_HEIGHT_METERS
-                        onConfirm(frcX, frcY, robotRotation.toDouble())
+                        val confirmX = ((fitHeightPx / 2f - robotOffset.y) / fitHeightPx) * FIELD_WIDTH_METERS
+                        val confirmY = ((fitWidthPx / 2f - robotOffset.x) / fitWidthPx) * FIELD_HEIGHT_METERS
+                        onConfirm(confirmX, confirmY, robotRotation.toDouble())
                         onBack()
                     }
                 },
@@ -158,25 +177,26 @@ fun PoseSelectorMainView(
                         .size(fitWidthDp, fitHeightDp)
                         .align(Alignment.Center),
             ) {
-                val robotWidthDp = (robotWidthMeter / FIELD_HEIGHT_METERS * fitWidthDp.value).dp
-                val robotLengthDp = (robotLengthMeter / FIELD_WIDTH_METERS * fitHeightDp.value).dp
+                val robotWidthDp = (robotWidthMeter * pxPerMeterY / density.density).dp
+                val robotLengthDp = (robotLengthMeter * pxPerMeterX / density.density).dp
 
                 RobotPoseEdit(
                     modifier =
                         Modifier
-                            .align(Alignment.BottomEnd)
+                            .align(Alignment.Center)
                             .offset {
                                 IntOffset(
-                                    (robotOffset.x.dp.toPx() + (robotWidthDp.toPx() / 2)).roundToInt(),
-                                    (robotOffset.y.dp.toPx() + (robotLengthDp.toPx() / 2)).roundToInt(),
+                                    robotOffset.x.roundToInt(),
+                                    robotOffset.y.roundToInt(),
                                 )
                             },
-                    rotation = robotRotation,
+                    rotation = -robotRotation,
                     onMove = { delta ->
                         robotOffset += delta
                     },
                     onRotate = { newRotation ->
-                        robotRotation = newRotation
+                        // Editor angles are screen-clockwise; field heading is CCW-positive.
+                        robotRotation = -newRotation
                     },
                     robotWidth = robotWidthDp,
                     robotLength = robotLengthDp,
@@ -191,8 +211,8 @@ fun PoseSelectorMainView(
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                         .padding(12.dp),
             ) {
-                val frcX = (-robotOffset.y.dp.value / fitHeightDp.value) * FIELD_WIDTH_METERS
-                val frcY = (-robotOffset.x.dp.value / fitWidthDp.value) * FIELD_HEIGHT_METERS
+                val frcX = ((fitHeightPx / 2f - robotOffset.y) / fitHeightPx) * FIELD_WIDTH_METERS
+                val frcY = ((fitWidthPx / 2f - robotOffset.x) / fitWidthPx) * FIELD_HEIGHT_METERS
 
                 Text(text = "X: ${"%.2f".format(frcX)}m", color = Color.Red, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(text = "Y: ${"%.2f".format(frcY)}m", color = Color.Green, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -215,7 +235,6 @@ fun RobotVisual(
     val isRedAlliance by RobotPoseManager.isRedAlliance.collectAsState()
     val primaryColor = if (isRedAlliance) RedAlliance else BlueAlliance
 
-    // Total height of drawing including control extension if shown
     val drawingHeight = if (showControls) (dotSize / 2) + extensionLength + robotLength else robotLength
 
     Canvas(modifier = modifier.size(width = robotWidth, height = drawingHeight)) {
@@ -229,33 +248,53 @@ fun RobotVisual(
         val squareTopY = if (showControls) dotRadiusPx + extensionPx else 0f
         val centerY = squareTopY + (robotLengthPx / 2f)
 
-        // Draw robot body
+        // Rounded body with a dark fill and a thick bumper border. In the pose selector
+        // the outline switches to orange and the heading arrow is hidden.
+        val borderColor = if (showControls) Orange else primaryColor
         drawRoundRect(
-            color = primaryColor,
+            color = Color(0xFF222222),
             topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
             size = Size(robotWidthPx, robotLengthPx),
-            cornerRadius = CornerRadius(8.dp.toPx()),
-            style = Stroke(width = strokeWidthPx),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+        )
+        drawRoundRect(
+            color = borderColor,
+            topLeft = Offset(centerX - robotWidthPx / 2f, squareTopY),
+            size = Size(robotWidthPx, robotLengthPx),
+            cornerRadius = CornerRadius(12.dp.toPx()),
+            style = Stroke(width = strokeWidthPx * 1.5f),
         )
 
-        // Draw Front Arrow - Tips at the front edge
-        val arrowPath =
-            Path().apply {
-                val arrowWidth = robotWidthPx * 0.5f
-                val arrowHeight = robotLengthPx * 0.3f
-
-                // Front edge is squareTopY
-                moveTo(centerX, squareTopY) // Tip at very front
-                lineTo(centerX - arrowWidth / 2f, squareTopY + arrowHeight)
-                lineTo(centerX + arrowWidth / 2f, squareTopY + arrowHeight)
-                close()
-            }
-        drawPath(path = arrowPath, color = primaryColor.copy(alpha = 0.7f))
+        if (!showControls) {
+            // AdvantagesScope heading arrow: a white center shaft running from halfway
+            // behind the centre to halfway in front, with an open (unfilled) V head.
+            val arrowBackY = centerY + robotLengthPx * 0.3f
+            val arrowTipY = centerY - robotLengthPx * 0.3f
+            val armHalf = robotLengthPx * 0.15f
+            val armBaseY = arrowTipY + armHalf
+            val arrowPath =
+                Path().apply {
+                    moveTo(centerX, arrowBackY)
+                    lineTo(centerX, arrowTipY)
+                    lineTo(centerX - armHalf, armBaseY)
+                    moveTo(centerX, arrowTipY)
+                    lineTo(centerX + armHalf, armBaseY)
+                }
+            drawPath(
+                path = arrowPath,
+                color = Color.White,
+                style =
+                    Stroke(
+                        width = strokeWidthPx,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    ),
+            )
+        }
 
         if (showControls) {
-            // Line from center to rotation dot
             drawLine(
-                color = primaryColor,
+                color = Orange,
                 start = Offset(centerX, centerY),
                 end = Offset(centerX, dotRadiusPx),
                 strokeWidth = strokeWidthPx,
@@ -267,7 +306,7 @@ fun RobotVisual(
 
 @Composable
 fun RobotPoseEdit(
-    rotation: Float, // RADIANS
+    rotation: Float,
     modifier: Modifier = Modifier,
     onMove: (Offset) -> Unit,
     onRotate: (Float) -> Unit,
@@ -276,13 +315,22 @@ fun RobotPoseEdit(
 ) {
     val extensionLength = 40.dp
     val dotSize = 16.dp
-    val primaryColor = returnPrimaryColor()
 
-    val visualHeight = (dotSize / 2) + extensionLength + robotLength
-    val centerOffsetY = (dotSize / 2) + extensionLength + (robotLength / 2)
+    // Rotation pivot is the handle box centre, which is also the robot's centre (same anchor
+    // as the main view). The rotate handle orbits at the END of the heading line (coincident
+    // with the line-end dot, like PathPlanner) so it stays locked to the arrow while turning.
+    val graphicHeight = robotLength + extensionLength + dotSize / 2
+    val radiusDp = extensionLength + (robotLength / 2)
+    val handleBoxSize = radiusDp * 2 + dotSize * 2
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val radiusPx = with(density) { radiusDp.toPx() }
+    val dotSizePx = with(density) { dotSize.toPx() }
+    val handleBoxSizePx = with(density) { handleBoxSize.toPx() }
 
     var localRotation by remember { mutableStateOf(rotation) }
     var isRotating by remember { mutableStateOf(false) }
+    var isMoving by remember { mutableStateOf(false) }
 
     LaunchedEffect(rotation) {
         if (!isRotating) {
@@ -293,96 +341,82 @@ fun RobotPoseEdit(
     Box(
         modifier =
             modifier
-                .size(width = robotWidth, height = visualHeight)
-                .offset(x = -robotWidth / 2, y = -centerOffsetY), // Center it on its logical center point
+                .size(handleBoxSize)
+                .pointerInput(Unit) {
+                    val centerX = handleBoxSizePx / 2f
+                    val centerY = centerX
+
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val dist = (offset - Offset(centerX, centerY)).getDistance()
+                            if (Math.abs(dist - radiusPx) < dotSizePx * 2f) {
+                                isRotating = true
+                            } else if (dist <= max(robotWidth.toPx(), robotLength.toPx()) / 2f) {
+                                isMoving = true
+                            }
+                        },
+                        onDragEnd = {
+                            isRotating = false
+                            isMoving = false
+                        },
+                        onDragCancel = {
+                            isRotating = false
+                            isMoving = false
+                        },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        if (isMoving) {
+                            onMove(dragAmount)
+                        } else if (isRotating) {
+                            val touchX = change.position.x - centerX
+                            val touchY = change.position.y - centerY
+                            val angle = atan2(touchY.toDouble(), touchX.toDouble()).toFloat()
+                            localRotation = angle + (Math.PI.toFloat() / 2f)
+                            onRotate(localRotation)
+                        }
+                    }
+                },
+        contentAlignment = Alignment.Center,
     ) {
-        // Rotated Body & Line
         Box(
             modifier =
                 Modifier
-                    .fillMaxSize()
+                    .size(width = robotWidth, height = graphicHeight)
                     .graphicsLayer {
                         rotationZ = Math.toDegrees(localRotation.toDouble()).toFloat()
-                        val yPivot = centerOffsetY.toPx() / size.height
-                        transformOrigin = TransformOrigin(0.5f, yPivot)
-                    },
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    }.align(Alignment.Center),
         ) {
             RobotVisual(
-                modifier = Modifier.fillMaxSize(),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .offset(y = -(extensionLength / 2 + dotSize / 4)),
                 showControls = true,
                 robotWidth = robotWidth,
                 robotLength = robotLength,
             )
         }
 
-        // MOVE dot (invisible touch target at center)
         Box(
             modifier =
                 Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = centerOffsetY - (dotSize / 2))
-                    .size(dotSize * 2) // Larger touch area
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            onMove(dragAmount)
-                        }
-                    },
-        ) {
-            // Visual Move Dot
-            Box(
-                modifier =
-                    Modifier
-                        .size(dotSize)
-                        .align(Alignment.Center)
-                        .clip(CircleShape)
-                        .background(primaryColor),
-            )
-        }
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(Orange),
+        )
 
-        // ROTATE dot (Positioned in a circle around center)
         val angleRadForHandle = localRotation.toDouble() - (Math.PI / 2.0)
-        val radiusPx = extensionLength + (robotLength / 2)
-        val dotOffsetX = (radiusPx.value * cos(angleRadForHandle)).dp
-        val dotOffsetY = (radiusPx.value * sin(angleRadForHandle)).dp
-
-        // Pivot is at centerOffsetY.
-        // Relative to TopCenter of Box(robotWidth, visualHeight):
-        // Center is (centerX, centerOffsetY)
-        val finalDotX = dotOffsetX
-        val finalDotY = centerOffsetY + dotOffsetY - (dotSize / 2)
+        val dotOffsetX = (radiusDp.value * cos(angleRadForHandle)).dp
+        val dotOffsetY = (radiusDp.value * sin(angleRadForHandle)).dp
 
         Box(
             modifier =
                 Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(x = finalDotX, y = finalDotY)
-                    .size(dotSize * 2) // Larger touch area
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { isRotating = true },
-                            onDragEnd = { isRotating = false },
-                            onDragCancel = { isRotating = false },
-                        ) { change, _ ->
-                            change.consume()
-                            val localCenterX = size.width / 2f
-                            val localCenterY = centerOffsetY.toPx()
-                            val currentPos = change.position
-                            val currentVector = Offset(currentPos.x - localCenterX, currentPos.y - localCenterY)
-                            val angle = atan2(currentVector.y.toDouble(), currentVector.x.toDouble()).toFloat()
-                            localRotation = angle + (Math.PI.toFloat() / 2f)
-                            onRotate(localRotation)
-                        }
-                    },
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(dotSize)
-                        .align(Alignment.Center)
-                        .clip(CircleShape)
-                        .background(primaryColor),
-            )
-        }
+                    .offset(x = dotOffsetX, y = dotOffsetY)
+                    .size(dotSize)
+                    .clip(CircleShape)
+                    .background(Orange),
+        )
     }
 }
