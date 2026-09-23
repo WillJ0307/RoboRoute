@@ -11,6 +11,7 @@ try:
 except Exception:  # noqa: BLE001 - import raises NoImplementationFoundException
     crossfiledialog = None
 import usb.core
+
 from classes.apk_installer import install_apk
 from classes.bridge import NTOverUSBBridge
 from classes.robot_ip import DriverStationInterop

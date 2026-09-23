@@ -1,0 +1,11 @@
+# Ruff config for the NTOverAOA desktop tool.
+#
+# Without a config, ruff resolves the project root from the working directory,
+# so `classes`/`StructDataStuff` are classified as first-party when checking from
+# this folder but third-party when checking from the repo root (e.g. the VS Code
+# workspace). That made import-sorting (I001) report contradictory violations
+# depending on where ruff ran. Pinning the config here keeps first-party
+# detection stable for every invocation.
+
+[lint]
+extend-select = ["I"]

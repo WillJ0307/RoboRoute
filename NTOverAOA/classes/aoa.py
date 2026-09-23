@@ -44,8 +44,6 @@ def toggle_accessory_mode(
         raise RuntimeError(f"AOA GET_PROTOCOL returned only {len(protocol)} byte(s)")
 
     protocol_version = int(protocol[0]) | (int(protocol[1]) << 8)
-    print(f"AOA GET_PROTOCOL -> {protocol!r}")
-    print(f"AOA PROTOCOL VERSION -> {protocol_version}")
 
     if protocol_version < 1:
         raise RuntimeError(
@@ -63,20 +61,18 @@ def toggle_accessory_mode(
 
     for index, value in strings:
         try:
-            result = device.ctrl_transfer(
+            device.ctrl_transfer(
                 usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT,
                 52,
                 0,
                 index,
                 value,
             )
-            print(f"AOA SET_STRING value={value!r} succeeded: {result!r}")
         except Exception as e:
             raise RuntimeError(
                 f"AOA SET_STRING index={index} value={value!r} failed: {e}"
             ) from e
 
-    print("AOA START_ACCESSORY")
     try:
         device.ctrl_transfer(
             usb.util.CTRL_TYPE_VENDOR | usb.util.CTRL_OUT,
@@ -87,7 +83,6 @@ def toggle_accessory_mode(
         )
     except Exception as e:
         raise RuntimeError(f"AOA START_ACCESSORY failed: {e}") from e
-    print("AOA START_ACCESSORY returned")
 
     # The device should now disconnect/re-enumerate.
     # Do not continue using the old PyUSB device object.
