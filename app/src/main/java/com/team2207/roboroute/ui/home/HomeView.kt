@@ -99,6 +99,13 @@ fun MainView(
     // rememberSaveable so the edited action survives navigating to the pose selector and back.
     var editingActionId by rememberSaveable { mutableStateOf<Int?>(null) }
     var showEditSheet by remember { mutableStateOf(false) }
+    // rememberSaveable so the pending button survives navigating to the pose selector and back.
+    var createForButtonId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    // Bumped on every fresh open so a new edit/create session starts with a blank form
+    // while the same session still restores typed text after a trip to the pose selector.
+    var editSession by rememberSaveable { mutableStateOf(0) }
+    var createSession by rememberSaveable { mutableStateOf(0) }
 
     val editingAction: UIAction? =
         editingActionId?.let { id ->
@@ -129,12 +136,52 @@ fun MainView(
 
         if (x != null && y != null && r != null) {
             draftPose = UIAction.PoseSelection(id = editingActionId ?: 0, name = "", x = x, y = y, r = r)
-            showEditSheet = true
+            if (createForButtonId != null) {
+                showCreateSheet = true
+            } else {
+                showEditSheet = true
+            }
             savedState.remove<Double>("pose_x")
             savedState.remove<Double>("pose_y")
             savedState.remove<Double>("pose_r")
         }
     }
+
+    val toProtoAction: (UIAction) -> com.team2207.roboroute.datastore.Action =
+        { uiAction ->
+            com.team2207.roboroute.datastore.Action
+                .newBuilder()
+                .apply {
+                    name =
+                        when (uiAction) {
+                            is UIAction.PathPlanner -> uiAction.name
+                            is UIAction.PoseSelection -> uiAction.name
+                        }
+                    when (uiAction) {
+                        is UIAction.PathPlanner -> {
+                            actionType = ActionType.PATHPLANNER
+                            pathName = uiAction.pathName
+                        }
+                        is UIAction.PoseSelection -> {
+                            actionType = ActionType.POSE
+                            pose =
+                                ProtoPose2d
+                                    .newBuilder()
+                                    .apply {
+                                        x = uiAction.x
+                                        y = uiAction.y
+                                        rotation = uiAction.r
+                                    }.build()
+                        }
+                    }
+                    id =
+                        if (uiAction.actionId != 0) {
+                            uiAction.actionId
+                        } else {
+                            (appData.actionsList.maxOfOrNull { it.id } ?: 0) + 1
+                        }
+                }.build()
+        }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -222,9 +269,14 @@ fun MainView(
                                 viewModel.updateButton(button.id, x, y, r, actionId)
                             },
                             onDelete = { viewModel.deleteButton(button.id) },
-                            onCreateNewAction = onNavigateToSettings,
+                            onCreateNewAction = { buttonId ->
+                                createForButtonId = buttonId
+                                createSession += 1
+                                showCreateSheet = true
+                            },
                             onEditAction = { actionId ->
                                 editingActionId = actionId
+                                editSession += 1
                                 showEditSheet = true
                             },
                             actions = appData.actionsList,
@@ -286,40 +338,7 @@ fun MainView(
 
             ActionEditorSheet(
                 onSaveAction = { uiAction ->
-                    val protoAction =
-                        com.team2207.roboroute.datastore.Action
-                            .newBuilder()
-                            .apply {
-                                name =
-                                    when (uiAction) {
-                                        is UIAction.PathPlanner -> uiAction.name
-                                        is UIAction.PoseSelection -> uiAction.name
-                                    }
-                                when (uiAction) {
-                                    is UIAction.PathPlanner -> {
-                                        actionType = ActionType.PATHPLANNER
-                                        pathName = uiAction.pathName
-                                    }
-                                    is UIAction.PoseSelection -> {
-                                        actionType = ActionType.POSE
-                                        pose =
-                                            ProtoPose2d
-                                                .newBuilder()
-                                                .apply {
-                                                    x = uiAction.x
-                                                    y = uiAction.y
-                                                    rotation = uiAction.r
-                                                }.build()
-                                    }
-                                }
-                                id =
-                                    if (uiAction.actionId != 0) {
-                                        uiAction.actionId
-                                    } else {
-                                        (appData.actionsList.maxOfOrNull { it.id } ?: 0) + 1
-                                    }
-                            }.build()
-                    viewModel.saveAction(protoAction)
+                    viewModel.saveAction(toProtoAction(uiAction))
                     draftPose = null
                     editingActionId = null
                 },
@@ -334,6 +353,33 @@ fun MainView(
                 },
                 currentPose = draftPose,
                 initialAction = editingAction,
+                formKey = editSession,
+            )
+
+            ActionEditorSheet(
+                onSaveAction = { uiAction ->
+                    val protoAction = toProtoAction(uiAction)
+                    viewModel.saveAction(protoAction)
+                    createForButtonId?.let { buttonId ->
+                        layout.buttonsList.firstOrNull { it.id == buttonId }?.let { button ->
+                            viewModel.updateButton(buttonId, button.x, button.y, button.radius, protoAction.id)
+                        }
+                    }
+                    createForButtonId = null
+                    draftPose = null
+                },
+                onEditPose = { x, y, r -> onEditPose(x, y, r, appData.robotWidth, appData.robotLength) },
+                showSheetInitial = showCreateSheet,
+                onSheetVisibilityChange = { visible ->
+                    showCreateSheet = visible
+                    if (!visible) {
+                        createForButtonId = null
+                        draftPose = null
+                    }
+                },
+                currentPose = draftPose,
+                initialAction = null,
+                formKey = createSession,
             )
         }
     }
@@ -370,7 +416,7 @@ fun CircularButton(
     isEditing: Boolean,
     onUpdate: (Float, Float, Float, Int) -> Unit,
     onDelete: () -> Unit,
-    onCreateNewAction: () -> Unit,
+    onCreateNewAction: (Int) -> Unit,
     onEditAction: (Int) -> Unit,
     actions: List<com.team2207.roboroute.datastore.Action>,
     maxWidth: Float,
@@ -573,7 +619,7 @@ fun CircularButton(
                     Button(
                         onClick = {
                             showActionDialog = false
-                            onCreateNewAction()
+                            onCreateNewAction(button.id)
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {

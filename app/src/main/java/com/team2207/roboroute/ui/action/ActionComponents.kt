@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,9 +66,14 @@ fun ActionCreationScreen(
     onEditPose: () -> Unit,
     currentPose: Action.PoseSelection? = null,
     initialAction: Action? = null,
+    // Key that identifies the current edit session so the typed form keeps its value
+    // while navigating to the pose selector and back, but starts blank on a fresh open.
+    formKey: Any? = null,
 ) {
-    // 1. Text field input states, initialized from initialAction if available
-    var nameInput by remember(initialAction) {
+    // 1. Text field input states, initialized from initialAction if available.
+    // rememberSaveable (not remember) so text typed before jumping to the pose selector
+    // survives that navigation and comes back intact on return.
+    var nameInput by rememberSaveable(initialAction, formKey) {
         mutableStateOf(
             initialAction?.let {
                 when (it) {
@@ -78,7 +84,7 @@ fun ActionCreationScreen(
         )
     }
 
-    var ntRouteInput by remember(initialAction) {
+    var ntRouteInput by rememberSaveable(initialAction, formKey) {
         mutableStateOf(
             initialAction?.let {
                 when (it) {

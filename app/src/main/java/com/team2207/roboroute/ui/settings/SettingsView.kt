@@ -510,6 +510,9 @@ fun ActionEditorSheet(
     onSheetVisibilityChange: (Boolean) -> Unit = {},
     currentPose: UIAction.PoseSelection? = null,
     initialAction: UIAction? = null,
+    // See ActionCreationScreen.formKey: identifies the edit session so the typed form
+    // survives a trip to the pose selector but resets on a fresh open.
+    formKey: Any? = null,
 ) {
     var showBottomSheet by remember(showSheetInitial) { mutableStateOf(showSheetInitial) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -544,6 +547,7 @@ fun ActionEditorSheet(
                 },
                 currentPose = currentPose,
                 initialAction = initialAction,
+                formKey = formKey,
             )
         }
     }
