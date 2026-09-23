@@ -55,6 +55,26 @@ class ConnectionState(Enum):
 
 
 class TKApp:
+    def _apply_window_icon(self):
+        # The logo is a wide lockup, so the active icon is the square, transparency-padded
+        # variant: feeding the raw PNG into Tk/Windows used to squash it in the title bar
+        # and leave it oddly offset in the taskbar. Prefer a multi-size .ico on Windows
+        # (crisp at 16/32/48px); everything else falls back to the square PNG.
+        ico = _resource_path("assets", "logo.ico")
+        if sys.platform == "win32" and os.path.exists(ico):
+            try:
+                self.root.iconbitmap(default=ico)
+                return
+            except tk.TclError:
+                pass
+
+        icon_file = _resource_path("assets", "logo_icon.png")
+        if not os.path.exists(icon_file):
+            icon_file = _resource_path("assets", "logo.png")
+        app_icon = tk.PhotoImage(file=icon_file)
+        self.root.iconphoto(True, app_icon)
+        self._app_icon = app_icon  # keep the image referenced for the life of the app
+
     def __init__(self, root):
         self.root = root
         self.root.title("NTOverAOA")
@@ -62,8 +82,7 @@ class TKApp:
         self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        app_icon = tk.PhotoImage(file=_resource_path("assets", "logo.png"))
-        root.iconphoto(True, app_icon)
+        self._apply_window_icon()
 
         self.style = ttk.Style()
         self.style.theme_use("clam")
