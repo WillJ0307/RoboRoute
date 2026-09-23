@@ -272,7 +272,7 @@ fun RobotVisual(
             val arrowTipY = centerY - robotLengthPx * 0.3f
             val armHalf = robotLengthPx * 0.15f
             val armBaseY = arrowTipY + armHalf
-            val arrowPath =
+            val arrowRoute =
                 Path().apply {
                     moveTo(centerX, arrowBackY)
                     lineTo(centerX, arrowTipY)
@@ -281,7 +281,7 @@ fun RobotVisual(
                     lineTo(centerX + armHalf, armBaseY)
                 }
             drawPath(
-                path = arrowPath,
+                path = arrowRoute,
                 color = Color.White,
                 style =
                     Stroke(

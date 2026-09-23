@@ -124,6 +124,12 @@ class HomeViewModel(
         }
     }
 
+    fun executeRoute(route: List<com.team2207.roboroute.datastore.Pose2d>) {
+        viewModelScope.launch {
+            AoaPoseReceiver.instance?.runRoute(route)
+        }
+    }
+
     fun saveAction(action: com.team2207.roboroute.datastore.Action) {
         viewModelScope.launch {
             actionRepository.addAction(action)
