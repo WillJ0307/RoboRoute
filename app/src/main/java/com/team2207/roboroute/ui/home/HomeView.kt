@@ -242,7 +242,15 @@ fun MainView(
                                 detectDragGestures(
                                     onDragStart = { offset -> activeDrawingPoints = listOf(offset) },
                                     onDragEnd = {
-                                        val route = processRawRoute(activeDrawingPoints, pxPerMeterX, pxPerMeterY, fitWidthPx, fitHeightPx)
+                                        val route =
+                                            processRawRoute(
+                                                activeDrawingPoints,
+                                                pxPerMeterX,
+                                                pxPerMeterY,
+                                                fitWidthPx,
+                                                fitHeightPx,
+                                                isFlipped = isRedAlliance,
+                                            )
                                         viewModel.executeRoute(route)
                                         activeDrawingPoints = emptyList() // Clear line after send
                                     },
@@ -743,6 +751,7 @@ fun processRawRoute(
     pxPerMeterY: Float,
     fitWidthPx: Float,
     fitHeightPx: Float,
+    isFlipped: Boolean,
 ): List<ProtoPose2d> {
     if (rawPoints.size < 2) return emptyList()
 
@@ -750,12 +759,20 @@ fun processRawRoute(
     val spacingMeters = 0.5
     var distanceAccumulator = 0.0
 
-    // Helper: Convert Pixels (relative to field top-left) to Meters (Bottom-Right origin)
-    fun toMeters(offset: Offset) =
-        Offset(
-            x = (fitHeightPx - offset.y) / pxPerMeterX,
-            y = (fitWidthPx - offset.x) / pxPerMeterY,
-        )
+    // Helper: Convert Pixels to Meters with alliance flipping support
+    fun toMeters(offset: Offset): Offset {
+        val unflippedX = (fitHeightPx - offset.y) / pxPerMeterX
+        val unflippedY = (fitWidthPx - offset.x) / pxPerMeterY
+
+        return if (isFlipped) {
+            Offset(
+                x = (FIELD_WIDTH_METERS - unflippedX).toFloat(),
+                y = (FIELD_HEIGHT_METERS - unflippedY).toFloat(),
+            )
+        } else {
+            Offset(x = unflippedX, y = unflippedY)
+        }
+    }
 
     // Add the very first point
     val start = toMeters(rawPoints[0])
