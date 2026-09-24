@@ -294,6 +294,28 @@ class AoaPoseReceiver(
         putValue(key = "/RoboRoute/RunPose", value = false) // Disabling trigger so it doesn't loop
     }
 
+    suspend fun runRoute(route: List<com.team2207.roboroute.datastore.Pose2d>) {
+        if (route.isEmpty()) return
+
+        val routeValue =
+            route.map { pose ->
+                mapOf(
+                    "translation" to mapOf("x" to pose.x, "y" to pose.y),
+                    "rotation" to mapOf("value" to pose.rotation),
+                )
+            }
+
+        val schema =
+            "struct Pose2d {struct Translation2d {double x; double y;} translation; " +
+                "struct Rotation2d {double value;} rotation;}"
+
+        putValue(key = "/RoboRoute/Route", value = routeValue, schema = schema)
+
+        putValue(key = "/RoboRoute/RunRoute", value = true)
+        delay(1000)
+        putValue(key = "/RoboRoute/RunRoute", value = false)
+    }
+
     fun subscribe(path: String) {
         SerialLogManager.addLog("AOA: Attempting to subscribe to: $path")
         if (outputStream == null) {

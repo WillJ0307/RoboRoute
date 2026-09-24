@@ -1,6 +1,9 @@
 package com.team2207.roboroute.ui.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,13 +44,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +77,10 @@ import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.settings.ActionEditorSheet
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -82,6 +95,10 @@ fun MainView(
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
+    var activeDrawingPoints by remember { mutableStateOf(listOf<Offset>()) }
+    val scope = rememberCoroutineScope()
+    val routeAlpha = remember { Animatable(1f) }
+    var fadeJob by remember { mutableStateOf<Job?>(null) }
     val isEditing by viewModel.isEditing.collectAsState()
     val layout by viewModel.layout.collectAsState()
     val appData by viewModel.appData.collectAsState()
@@ -209,8 +226,8 @@ fun MainView(
 
             // Separate px-per-meter per axis so coordinates map onto the drawn image exactly.
             // Portrait image: field X (long, 16.54175 m) runs vertically, field Y (short, 8.0137 m) horizontally.
-            val pxPerMeterX = fitHeightPx / FIELD_WIDTH_METERS
-            val pxPerMeterY = fitWidthPx / FIELD_HEIGHT_METERS
+            val pxPerMeterX = (fitHeightPx / FIELD_WIDTH_METERS).toFloat()
+            val pxPerMeterY = (fitWidthPx / FIELD_HEIGHT_METERS).toFloat()
 
             Box(
                 modifier =
@@ -227,8 +244,67 @@ fun MainView(
                 modifier =
                     Modifier
                         .size(fitWidthDp, fitHeightDp)
-                        .align(Alignment.Center),
+                        .align(Alignment.Center)
+                        .pointerInput(isEditing) {
+                            // Drawing is only active if we aren't in Edit Mode
+                            if (!isEditing) {
+                                detectDragGestures(
+                                    onDragStart = { offset ->
+                                        fadeJob?.cancel()
+                                        scope.launch { routeAlpha.snapTo(1f) }
+                                        activeDrawingPoints = listOf(offset)
+                                    },
+                                    onDragEnd = {
+                                        val route =
+                                            processRawRoute(
+                                                activeDrawingPoints,
+                                                pxPerMeterX,
+                                                pxPerMeterY,
+                                                fitWidthPx,
+                                                fitHeightPx,
+                                                isFlipped = isRedAlliance,
+                                            )
+                                        viewModel.executeRoute(route)
+
+                                        fadeJob =
+                                            scope.launch {
+                                                delay(10000)
+                                                routeAlpha.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = tween(durationMillis = 500),
+                                                )
+                                                activeDrawingPoints = emptyList() // Clear line after send and animate
+                                                routeAlpha.snapTo(1f) // Reset alpha for next drawing
+                                            }
+                                    },
+                                    onDragCancel = { activeDrawingPoints = emptyList() },
+                                ) { change, _ ->
+                                    change.consume()
+                                    activeDrawingPoints = activeDrawingPoints + change.position
+                                }
+                            }
+                        },
             ) {
+                val primaryColor = returnPrimaryColor()
+                Canvas(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = routeAlpha.value },
+                ) {
+                    if (activeDrawingPoints.size > 1) {
+                        val route =
+                            Path().apply {
+                                moveTo(activeDrawingPoints[0].x, activeDrawingPoints[0].y)
+                                activeDrawingPoints.forEach { lineTo(it.x, it.y) }
+                            }
+                        drawPath(
+                            path = route,
+                            color = primaryColor,
+                            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        )
+                    }
+                }
                 if (isPoseValid) {
                     val xMeter = if (isFlipped) FIELD_WIDTH_METERS - livePose.x else livePose.x
                     val yMeter = if (isFlipped) FIELD_HEIGHT_METERS - livePose.y else livePose.y
@@ -550,7 +626,7 @@ fun CircularButton(
                                     val factorX = if (alignment == Alignment.TopStart || alignment == Alignment.BottomStart) -1 else 1
                                     val factorY = if (alignment == Alignment.TopStart || alignment == Alignment.TopEnd) -1 else 1
                                     val deltaRadius =
-                                        if (Math.abs(dragAmount.x) > Math.abs(dragAmount.y)) {
+                                        if (abs(dragAmount.x) > abs(dragAmount.y)) {
                                             dragAmount.x * factorX
                                         } else {
                                             dragAmount.y * factorY
@@ -695,4 +771,85 @@ fun MenuButton(
             }
         }
     }
+}
+
+fun processRawRoute(
+    rawPoints: List<Offset>,
+    pxPerMeterX: Float,
+    pxPerMeterY: Float,
+    fitWidthPx: Float,
+    fitHeightPx: Float,
+    isFlipped: Boolean,
+): List<ProtoPose2d> {
+    if (rawPoints.size < 2) return emptyList()
+
+    val waypoints = mutableListOf<ProtoPose2d>()
+    val spacingMeters = 0.5
+    var distanceAccumulator = 0.0
+
+    // Helper: Convert Pixels to Meters with alliance flipping support
+    fun toMeters(offset: Offset): Offset {
+        val unflippedX = (fitHeightPx - offset.y) / pxPerMeterX
+        val unflippedY = (fitWidthPx - offset.x) / pxPerMeterY
+
+        return if (isFlipped) {
+            Offset(
+                x = (FIELD_WIDTH_METERS - unflippedX).toFloat(),
+                y = (FIELD_HEIGHT_METERS - unflippedY).toFloat(),
+            )
+        } else {
+            Offset(x = unflippedX, y = unflippedY)
+        }
+    }
+
+    // Add the very first point
+    val start = toMeters(rawPoints[0])
+    waypoints.add(
+        ProtoPose2d
+            .newBuilder()
+            .setX(start.x.toDouble())
+            .setY(start.y.toDouble())
+            .setRotation(0.0)
+            .build(),
+    )
+
+    // Walk through every touch segment
+    for (i in 0 until rawPoints.size - 1) {
+        val p1 = toMeters(rawPoints[i])
+        val p2 = toMeters(rawPoints[i + 1])
+
+        val segmentVector = p2 - p1
+        val segmentLength = segmentVector.getDistance()
+        if (segmentLength == 0f) continue
+
+        val angle = kotlin.math.atan2(segmentVector.y.toDouble(), segmentVector.x.toDouble())
+        var remaining = segmentLength
+
+        // If this segment is long enough to include one or more 0.5m waypoints
+        while (distanceAccumulator + remaining >= spacingMeters) {
+            val needed = (spacingMeters - distanceAccumulator).toFloat()
+            val ratio = needed / remaining
+
+            // Calculate exact meter position
+            val pointMeters =
+                Offset(
+                    p1.x + (p2.x - p1.x) * (1 - remaining / segmentLength + ratio),
+                    p1.y + (p2.y - p1.y) * (1 - remaining / segmentLength + ratio),
+                )
+
+            waypoints.add(
+                ProtoPose2d
+                    .newBuilder()
+                    .setX(pointMeters.x.toDouble())
+                    .setY(pointMeters.y.toDouble())
+                    .setRotation(angle)
+                    .build(),
+            )
+
+            distanceAccumulator = 0.0
+            remaining -= needed
+        }
+        distanceAccumulator += remaining
+    }
+    return waypoints
 }
