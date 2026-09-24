@@ -90,6 +90,16 @@ class AoaPoseReceiver(
     private var pendingY = 0.0
     private var pendingRotation = 0.0
 
+    private var hasPoseSamples = false
+    private var prevSampleX = 0.0
+    private var prevSampleY = 0.0
+    private var prevSampleRotation = 0.0
+    private var prevSampleTime = 0L
+    private var latestSampleX = 0.0
+    private var latestSampleY = 0.0
+    private var latestSampleRotation = 0.0
+    private var latestSampleTime = 0L
+
     companion object {
         @android.annotation.SuppressLint("StaticFieldLeak")
         @Volatile
@@ -98,7 +108,7 @@ class AoaPoseReceiver(
 
         private const val ACTION_USB_PERMISSION = "com.team2207.roboroute.USB_PERMISSION"
         private const val ALLIANCE_PATH = "FMSInfo/IsRedAlliance"
-        private const val POSE_PUBLISH_INTERVAL_MS = 33L
+        private const val POSE_PUBLISH_INTERVAL_MS = 16L
         private const val NEWLINE_BYTE = '\n'.code.toByte()
         private const val MAX_LINE_BYTES = 1 shl 22
         private const val AXIS_X = 1
@@ -109,6 +119,8 @@ class AoaPoseReceiver(
         private const val RECONNECT_DELAY_MS = 500L
         private const val OPEN_RETRY_INTERVAL_MS = 3000L
         private const val PERMISSION_RETRY_INTERVAL_MS = 15000L
+        private const val LERP_STALE_MS = 60L
+        private const val LERP_SNAP_DISTANCE_SQ = 25.0
     }
 
     private val usbReceiver =
@@ -664,11 +676,59 @@ class AoaPoseReceiver(
         }
 
         if (hasFullPose) {
-            RobotPoseManager.updateFullPose(x, y, rotation)
+            val nowMs = System.currentTimeMillis()
+
+            if (hasPoseSamples) {
+                prevSampleX = latestSampleX
+                prevSampleY = latestSampleY
+                prevSampleRotation = latestSampleRotation
+                prevSampleTime = latestSampleTime
+            }
+
+            latestSampleX = x
+            latestSampleY = y
+            latestSampleRotation = rotation
+            latestSampleTime = nowMs
+            hasPoseSamples = true
+
+            val (ix, iy, ir) = interpolateFullPose(nowMs)
+            RobotPoseManager.updateFullPose(ix, iy, ir)
         } else if (axisMask != 0) {
             if (axisMask and AXIS_X != 0) RobotPoseManager.updateX(x)
             if (axisMask and AXIS_Y != 0) RobotPoseManager.updateY(y)
             if (axisMask and AXIS_ROTATION != 0) RobotPoseManager.updateRotation(rotation)
         }
+    }
+
+    private fun interpolateFullPose(nowMs: Long): Triple<Double, Double, Double> {
+        if (
+            !hasPoseSamples ||
+            nowMs - latestSampleTime > LERP_STALE_MS ||
+            latestSampleTime - prevSampleTime <= 0
+        ) {
+            return Triple(latestSampleX, latestSampleY, latestSampleRotation)
+        }
+
+        val dx = latestSampleX - prevSampleX
+        val dy = latestSampleY - prevSampleY
+        if (dx * dx + dy * dy > LERP_SNAP_DISTANCE_SQ) {
+            return Triple(latestSampleX, latestSampleY, latestSampleRotation)
+        }
+
+        val t =
+            (
+                (nowMs - prevSampleTime).toDouble() /
+                    (latestSampleTime - prevSampleTime)
+            ).coerceIn(0.0, 1.0)
+
+        val ix = prevSampleX + dx * t
+        val iy = prevSampleY + dy * t
+
+        var delta = (latestSampleRotation - prevSampleRotation) % (2.0 * Math.PI)
+        if (delta > Math.PI) delta -= 2.0 * Math.PI
+        if (delta < -Math.PI) delta += 2.0 * Math.PI
+        val ir = prevSampleRotation + delta * t
+
+        return Triple(ix, iy, ir)
     }
 }
