@@ -280,21 +280,14 @@ class NTHandler:
                 if current_value is not None and current_value.isValid():
                     value = current_value
 
-                if value is None and topic.exists():
+                if value is None:
                     subscriber = self._subscribers.get(key)
                     if subscriber is None:
                         subscriber = topic.genericSubscribe()
                         self._subscribers[key] = subscriber
-                    deadline = time.monotonic() + 0.5
-
-                    while time.monotonic() < deadline:
-                        current_value = subscriber.get()
-
-                        if current_value is not None and current_value.isValid():
-                            value = current_value
-                            break
-
-                        time.sleep(0.02)
+                    current_value = subscriber.get()
+                    if current_value is not None and current_value.isValid():
+                        value = current_value
 
                 if value is None:
                     still_waiting.append(key)

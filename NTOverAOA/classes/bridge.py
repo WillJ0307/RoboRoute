@@ -1,4 +1,5 @@
 import json
+import queue
 import threading
 import time
 
@@ -9,6 +10,9 @@ from .subscriptions import SubscriptionState
 from .usb_handler import USBHandler
 
 TOPIC_RESEND_INTERVAL = 10.0
+LOOP_SLEEP = 0.005
+USB_MAX_PER_TICK = 64
+READER_TIMEOUT = 0.25
 
 
 class NTOverUSBBridge:
@@ -53,6 +57,10 @@ class NTOverUSBBridge:
         self._state("usb", "connecting")
         self._state("nt", "connecting")
 
+        self._inbound = queue.Queue(maxsize=USB_MAX_PER_TICK)
+        reader = threading.Thread(target=self._usb_reader, daemon=True)
+        reader.start()
+
         try:
             self.usb.connect(vidpid)
             self._state("usb", "connected")
@@ -62,7 +70,7 @@ class NTOverUSBBridge:
             self._last_topic_send = time.monotonic()
 
             while not self._stop.is_set():
-                self._process_usb_message()
+                self._drain_inbound()
                 self._process_nt_events()
                 self._process_initial_values()
                 # The server (robot code / sim) is what owns the NT connection; when it goes
@@ -77,7 +85,7 @@ class NTOverUSBBridge:
                 if time.monotonic() - self._last_topic_send >= TOPIC_RESEND_INTERVAL:
                     self._send_topic_listing()
                     self._last_topic_send = time.monotonic()
-                time.sleep(0.02)
+                time.sleep(LOOP_SLEEP)
         except TimeoutError as error:
             self._log(f"Connection timed out: {error}")
         except (OSError, RuntimeError, usb.core.USBError) as error:
@@ -88,30 +96,51 @@ class NTOverUSBBridge:
                 self._log(f"Connection failed: {error}")
         finally:
             self._stop.set()
+            reader.join(timeout=1)
             self._disconnect()
 
-    def _process_usb_message(self):
-        if not self.usb.is_connected():
-            return
+    def _usb_reader(self):
+        while not self._stop.is_set():
+            if not self.usb.is_connected():
+                self._stop.wait(READER_TIMEOUT)
+                continue
 
-        try:
-            command = self.usb.receive_message()
-        except usb.core.USBTimeoutError:
-            return
-        except (OSError, RuntimeError, usb.core.USBError) as error:
-            now = time.monotonic()
-            if now - self._last_read_error > 3:
-                self._log(f"USB read error: {self.usb.error_hint(error)}")
-                self._last_read_error = now
-            self._stop.set()
-            return
-        except (TypeError, ValueError, json.JSONDecodeError) as error:
-            self._log(f"Bad USB message: {error}")
-            return
+            try:
+                command = self.usb.receive_message(timeout=READER_TIMEOUT)
+            except usb.core.USBTimeoutError:
+                continue
+            except (OSError, RuntimeError, usb.core.USBError) as error:
+                now = time.monotonic()
+                if now - self._last_read_error > 3:
+                    self._log(f"USB read error: {self.usb.error_hint(error)}")
+                    self._last_read_error = now
+                if not self._stop.is_set():
+                    self._stop.set()
+                return
+            except (TypeError, ValueError, json.JSONDecodeError) as error:
+                self._log(f"Bad USB message: {error}")
+                continue
 
-        if command is None:
-            return
+            if command is None:
+                continue
 
+            try:
+                self._inbound.put_nowait(command)
+            except queue.Full:
+                self._log(
+                    f"USB inbound queue full, dropping message: "
+                    f"{command.get('action', '?')}"
+                )
+
+    def _drain_inbound(self):
+        for _ in range(USB_MAX_PER_TICK):
+            try:
+                command = self._inbound.get_nowait()
+            except queue.Empty:
+                return
+            self._handle_command(command)
+
+    def _handle_command(self, command):
         action = command["action"]
         if action == "subscribe":
             keys = command["keys"]
@@ -128,6 +157,7 @@ class NTOverUSBBridge:
             self._log(f"Unknown USB action: {action}")
 
     def _process_nt_events(self):
+        outbound = []
         for event in self.nt.read_events():
             try:
                 message = self.nt.handle_event(
@@ -150,7 +180,10 @@ class NTOverUSBBridge:
             except (TypeError, ValueError, json.JSONDecodeError):
                 pass
 
-            self._send_messages([message.encode("utf-8")])
+            outbound.append(message.encode("utf-8"))
+
+        if outbound:
+            self._send_messages(outbound)
 
     def _process_initial_values(self):
         now = time.monotonic()
