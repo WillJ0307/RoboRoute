@@ -364,7 +364,7 @@ class TKApp:
         except (tk.TclError, KeyError):
             pass
 
-        combo.bind("<<ComboboxSelected>>", lambda _e: combo.selection_clear())
+        combo.bind("<<ComboboxSelected>>", lambda _e: combo.selection_clear(), add="+")
         combo.bind("<FocusOut>", lambda _e: combo.selection_clear())
 
     def _available_ip_sources(self):
