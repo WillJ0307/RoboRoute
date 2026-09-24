@@ -1,6 +1,8 @@
 package com.team2207.roboroute.ui.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -74,6 +77,9 @@ import com.team2207.roboroute.ui.components.FullScreenImage
 import com.team2207.roboroute.ui.settings.ActionEditorSheet
 import com.team2207.roboroute.ui.theme.returnPrimaryColor
 import com.team2207.roboroute.ui.theme.returnSecondaryColor
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -90,6 +96,9 @@ fun MainView(
     viewModel: HomeViewModel = viewModel(),
 ) {
     var activeDrawingPoints by remember { mutableStateOf(listOf<Offset>()) }
+    val scope = rememberCoroutineScope()
+    val routeAlpha = remember { Animatable(1f) }
+    var fadeJob by remember { mutableStateOf<Job?>(null) }
     val isEditing by viewModel.isEditing.collectAsState()
     val layout by viewModel.layout.collectAsState()
     val appData by viewModel.appData.collectAsState()
@@ -237,10 +246,14 @@ fun MainView(
                         .size(fitWidthDp, fitHeightDp)
                         .align(Alignment.Center)
                         .pointerInput(isEditing) {
-                            // Drawing is only active if we are NOT in Edit Mode
+                            // Drawing is only active if we aren't in Edit Mode
                             if (!isEditing) {
                                 detectDragGestures(
-                                    onDragStart = { offset -> activeDrawingPoints = listOf(offset) },
+                                    onDragStart = { offset ->
+                                        fadeJob?.cancel()
+                                        scope.launch { routeAlpha.snapTo(1f) }
+                                        activeDrawingPoints = listOf(offset)
+                                    },
                                     onDragEnd = {
                                         val route =
                                             processRawRoute(
@@ -252,7 +265,17 @@ fun MainView(
                                                 isFlipped = isRedAlliance,
                                             )
                                         viewModel.executeRoute(route)
-                                        activeDrawingPoints = emptyList() // Clear line after send
+
+                                        fadeJob =
+                                            scope.launch {
+                                                delay(10000)
+                                                routeAlpha.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = tween(durationMillis = 500),
+                                                )
+                                                activeDrawingPoints = emptyList() // Clear line after send and animate
+                                                routeAlpha.snapTo(1f) // Reset alpha for next drawing
+                                            }
                                     },
                                     onDragCancel = { activeDrawingPoints = emptyList() },
                                 ) { change, _ ->
@@ -263,7 +286,12 @@ fun MainView(
                         },
             ) {
                 val primaryColor = returnPrimaryColor()
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = routeAlpha.value },
+                ) {
                     if (activeDrawingPoints.size > 1) {
                         val route =
                             Path().apply {
