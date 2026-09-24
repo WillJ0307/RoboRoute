@@ -700,9 +700,7 @@ class AoaPoseReceiver(
         }
     }
 
-    private fun interpolateFullPose(
-        nowMs: Long,
-    ): Triple<Double, Double, Double> {
+    private fun interpolateFullPose(nowMs: Long): Triple<Double, Double, Double> {
         if (
             !hasPoseSamples ||
             nowMs - latestSampleTime > LERP_STALE_MS ||
@@ -718,9 +716,10 @@ class AoaPoseReceiver(
         }
 
         val t =
-            ((nowMs - prevSampleTime).toDouble() /
-                (latestSampleTime - prevSampleTime))
-                .coerceIn(0.0, 1.0)
+            (
+                (nowMs - prevSampleTime).toDouble() /
+                    (latestSampleTime - prevSampleTime)
+            ).coerceIn(0.0, 1.0)
 
         val ix = prevSampleX + dx * t
         val iy = prevSampleY + dy * t
