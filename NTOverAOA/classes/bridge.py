@@ -65,6 +65,13 @@ class NTOverUSBBridge:
                 self._process_usb_message()
                 self._process_nt_events()
                 self._process_initial_values()
+                # The server (robot code / sim) is what owns the NT connection; when it goes
+                # away we are just a client and lose it. Detect the drop so the app stops
+                # showing a stale "connected" indicator and stops listing leftover topics.
+                if not self.nt.is_connected():
+                    self._log("NetworkTables connection lost")
+                    self._state("nt", "disconnected")
+                    break
                 # The periodic topic listing doubles as the liveness signal the tablet uses
                 # to detect a software disconnect, so send it even once subscribed.
                 if time.monotonic() - self._last_topic_send >= TOPIC_RESEND_INTERVAL:
@@ -114,6 +121,8 @@ class NTOverUSBBridge:
                 self.on_subscription(key, {"value": "", "time": None})
             self._log(f"Subscribed to {len(keys)} topics")
         elif action == "put":
+            key = command.get("key", "")
+            self._log(f"NT put [{key}]")
             self.nt.put_message(command)
         else:
             self._log(f"Unknown USB action: {action}")
