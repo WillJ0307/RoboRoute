@@ -420,11 +420,6 @@ class USBHandler:
         )
 
         if any(word in low for word in keywords):
-            return (
-                message + " - WinUSB driver not bound to accessory-mode "
-                "18D1:2D00. "
-                "Run: powershell -ExecutionPolicy Bypass -File "
-                "setup_accessory_driver.ps1"
-            )
+            return message + " - WinUSB driver not bound to accessory-mode "
 
         return message
